@@ -61,7 +61,14 @@ python add_subtitles.py clips -o subtitled --burn
   it per clip. Note: `hi` transcribes Hindi words in Devanagari script with
   English words kept in Latin script — this is Whisper's normal Hindi
   behavior, not Romanized "Hinglish" text.
-- `--model` controls accuracy vs. speed on CPU: `tiny`/`base` are fastest,
-  `small` (default) is the best balance, `medium`/`large-v3` are slower but
-  more accurate. On a CPU-only laptop (no dedicated GPU), `small` is
-  recommended for most clips.
+- `--language hinglish` uses a model fine-tuned specifically for Hindi+English
+  code-switched speech ([Oriserve/Whisper-Hindi2Hinglish-Swift](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift))
+  and outputs fully in Roman script — true Hinglish text like `mujhe office
+  jana hai lekin traffic bahut zyada hai`, not Devanagari. This needs torch +
+  transformers (`pip install -r requirements.txt` pulls the CPU build of
+  torch, a few hundred MB). `--model` is ignored in this mode — it's a fixed,
+  small (Whisper-base-sized, ~73M params) model, so it's still CPU-friendly.
+- `--model` controls accuracy vs. speed on CPU for `en`/`hi`/`auto` modes:
+  `tiny`/`base` are fastest, `small` (default) is the best balance,
+  `medium`/`large-v3` are slower but more accurate. On a CPU-only laptop (no
+  dedicated GPU), `small` is recommended for most clips.

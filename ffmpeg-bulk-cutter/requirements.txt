@@ -1,1 +1,7 @@
 faster-whisper
+
+# Only needed for --language hinglish (Oriserve/Whisper-Hindi2Hinglish-Swift).
+# torch is a big download (a few hundred MB+); skip these two if you only
+# ever use en/hi/auto.
+torch --index-url https://download.pytorch.org/whl/cpu
+transformers
