@@ -124,9 +124,19 @@ def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
     return count, "hinglish"
 
 
+def _escape_subtitles_path(srt_path: Path) -> str:
+    # ffmpeg's -vf filtergraph parser treats ':' as an option separator and
+    # '\' as its own escape character, so a doubled-backslash escape gets
+    # consumed by the parser instead of surviving to the file path (breaks
+    # Windows paths like output\captioned\clip.srt). Using forward slashes
+    # sidesteps backslash escaping entirely; only a drive-letter colon
+    # (e.g. "F:") still needs escaping.
+    path_str = str(srt_path).replace("\\", "/")
+    return path_str.replace(":", "\\:")
+
+
 def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu: bool = False):
-    # ffmpeg's subtitles filter needs the path escaped for its internal parser
-    escaped_srt = str(srt_path).replace("\\", "\\\\").replace(":", "\\:")
+    escaped_srt = _escape_subtitles_path(srt_path)
     base_cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vf", f"subtitles={escaped_srt}"]
 
     if use_gpu:
