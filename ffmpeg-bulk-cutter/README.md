@@ -1,7 +1,8 @@
 # FFmpeg Bulk Cutter
 
-Cut many clips out of one video from a CSV list of timestamps. Works on
-Windows, Mac, and Linux — it just needs Python 3 and `ffmpeg` on your PATH.
+Cut many clips out of one video from a CSV list of timestamps, then generate
+free local subtitles for them. Works on Windows, Mac, and Linux — no GPU
+required, everything runs on CPU.
 
 ## Setup
 
@@ -9,6 +10,11 @@ Install ffmpeg if you don't have it:
 - Mac: `brew install ffmpeg`
 - Windows: `winget install ffmpeg` (or download from ffmpeg.org and add to PATH)
 - Linux: `sudo apt install ffmpeg`
+
+Install the Python subtitle dependency:
+```
+pip install -r requirements.txt
+```
 
 ## CSV format
 
@@ -38,3 +44,24 @@ python cut_clips.py input.mp4 timestamps.csv -o clips --reencode
 ```
 
 See `timestamps.example.csv` for a sample you can copy and edit.
+
+## Subtitles
+
+Generate free, local subtitles for one video or a whole folder of clips
+(no internet needed after the model downloads once, no GPU required):
+
+```
+python add_subtitles.py clips/intro.mp4
+python add_subtitles.py clips -o subtitled --burn
+```
+
+- `--burn` also outputs a copy of each video with captions burned in
+  (without it, you just get `.srt` files you can load in Premiere/Resolve)
+- `--language en` / `--language hi` forces a language; default `auto` detects
+  it per clip. Note: `hi` transcribes Hindi words in Devanagari script with
+  English words kept in Latin script — this is Whisper's normal Hindi
+  behavior, not Romanized "Hinglish" text.
+- `--model` controls accuracy vs. speed on CPU: `tiny`/`base` are fastest,
+  `small` (default) is the best balance, `medium`/`large-v3` are slower but
+  more accurate. On a CPU-only laptop (no dedicated GPU), `small` is
+  recommended for most clips.
