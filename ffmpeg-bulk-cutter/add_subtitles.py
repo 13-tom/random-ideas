@@ -24,14 +24,47 @@ Notes on language:
                         --model is ignored in this mode.
 """
 import argparse
-import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+import gpu_utils
+from ffmpeg_utils import get_media_duration
+
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 HINGLISH_MODEL_ID = "Oriserve/Whisper-Hindi2Hinglish-Swift"
+
+
+def load_whisper_model(model_size: str, use_gpu: bool):
+    from faster_whisper import WhisperModel
+
+    if use_gpu:
+        try:
+            model = WhisperModel(model_size, device="cuda", compute_type="float16")
+            print(f"Loaded Whisper '{model_size}' on GPU (CUDA, float16)")
+            return model
+        except Exception as e:
+            print(f"GPU load failed ({e}); falling back to CPU")
+    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    print(f"Loaded Whisper '{model_size}' on CPU (int8)")
+    return model
+
+
+def load_hinglish_pipeline(use_gpu: bool):
+    from transformers import pipeline
+    import torch
+
+    if use_gpu:
+        try:
+            pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=0, torch_dtype=torch.float16)
+            print(f"Loaded {HINGLISH_MODEL_ID} on GPU (CUDA, float16)")
+            return pipe
+        except Exception as e:
+            print(f"GPU load failed ({e}); falling back to CPU")
+    pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=-1, torch_dtype=torch.float32)
+    print(f"Loaded {HINGLISH_MODEL_ID} on CPU")
+    return pipe
 
 
 def format_srt_timestamp(seconds: float) -> str:
@@ -40,14 +73,6 @@ def format_srt_timestamp(seconds: float) -> str:
     minutes, millis = divmod(millis, 60_000)
     secs, millis = divmod(millis, 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
-
-
-def get_media_duration(video_path: Path) -> float:
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(video_path)],
-        capture_output=True, text=True, check=True,
-    )
-    return float(json.loads(result.stdout)["format"]["duration"])
 
 
 def write_srt(srt_path: Path, entries):
@@ -99,17 +124,20 @@ def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
     return count, "hinglish"
 
 
-def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path):
+def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu: bool = False):
     # ffmpeg's subtitles filter needs the path escaped for its internal parser
     escaped_srt = str(srt_path).replace("\\", "\\\\").replace(":", "\\:")
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-vf", f"subtitles={escaped_srt}",
-        "-c:a", "copy",
-        str(output_path),
-    ]
-    subprocess.run(cmd, check=True)
+    base_cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vf", f"subtitles={escaped_srt}"]
+
+    if use_gpu:
+        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
+        result = subprocess.run(gpu_cmd, capture_output=True)
+        if result.returncode == 0:
+            return
+        print("  GPU encode failed at runtime, falling back to CPU (libx264)")
+
+    cpu_cmd = base_cmd + ["-c:v", "libx264", "-c:a", "copy", str(output_path)]
+    subprocess.run(cpu_cmd, check=True)
 
 
 def main():
@@ -119,6 +147,7 @@ def main():
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="Force a language, auto-detect, or 'hinglish' for Roman-script Hindi+English (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size (default: small - best speed/accuracy balance on CPU). Ignored when --language hinglish is used.")
     parser.add_argument("--burn", action="store_true", help="Also produce a copy of the video with subtitles burned in")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -136,14 +165,17 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    gpu_requested = not args.no_gpu
+    use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
+    use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+
     if args.language == "hinglish":
         try:
-            from transformers import pipeline
+            from transformers import pipeline  # noqa: F401
         except ImportError:
             sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
 
-        print(f"Loading {HINGLISH_MODEL_ID} (CPU)... this only happens once per run.")
-        pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID)
+        pipe = load_hinglish_pipeline(use_gpu_whisper)
 
         for i, video_path in enumerate(videos, start=1):
             srt_path = args.output_dir / f"{video_path.stem}.srt"
@@ -153,19 +185,18 @@ def main():
 
             if args.burn:
                 burned_path = args.output_dir / f"{video_path.stem}_captioned{video_path.suffix}"
-                burn_subtitles(video_path, srt_path, burned_path)
+                burn_subtitles(video_path, srt_path, burned_path, use_gpu_encode)
                 print(f"    -> {burned_path} (captions burned in)")
 
         print(f"\nDone. Output in {args.output_dir}/")
         return
 
     try:
-        from faster_whisper import WhisperModel
+        from faster_whisper import WhisperModel  # noqa: F401
     except ImportError:
         sys.exit("faster-whisper is not installed. Run: pip install faster-whisper")
 
-    print(f"Loading Whisper '{args.model}' model (CPU, int8)... this only happens once per run.")
-    model = WhisperModel(args.model, device="cpu", compute_type="int8")
+    model = load_whisper_model(args.model, use_gpu_whisper)
 
     language = None if args.language == "auto" else args.language
 
@@ -177,7 +208,7 @@ def main():
 
         if args.burn:
             burned_path = args.output_dir / f"{video_path.stem}_captioned{video_path.suffix}"
-            burn_subtitles(video_path, srt_path, burned_path)
+            burn_subtitles(video_path, srt_path, burned_path, use_gpu_encode)
             print(f"    -> {burned_path} (captions burned in)")
 
     print(f"\nDone. Output in {args.output_dir}/")

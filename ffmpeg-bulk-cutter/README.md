@@ -1,8 +1,11 @@
 # FFmpeg Bulk Cutter
 
 Cut many clips out of one video from a CSV list of timestamps, then generate
-free local subtitles for them. Works on Windows, Mac, and Linux — no GPU
-required, everything runs on CPU.
+free local subtitles for them. Works on Windows, Mac, and Linux, and on any
+hardware: it runs on CPU by default, and automatically speeds up using an
+NVIDIA GPU (CUDA/NVENC) if one is detected — no setup needed either way, and
+it safely falls back to CPU if GPU encoding fails for any reason (e.g. a
+missing/outdated driver).
 
 ## Setup
 
@@ -68,7 +71,43 @@ python add_subtitles.py clips -o subtitled --burn
   transformers (`pip install -r requirements.txt` pulls the CPU build of
   torch, a few hundred MB). `--model` is ignored in this mode — it's a fixed,
   small (Whisper-base-sized, ~73M params) model, so it's still CPU-friendly.
-- `--model` controls accuracy vs. speed on CPU for `en`/`hi`/`auto` modes:
-  `tiny`/`base` are fastest, `small` (default) is the best balance,
-  `medium`/`large-v3` are slower but more accurate. On a CPU-only laptop (no
-  dedicated GPU), `small` is recommended for most clips.
+- `--model` controls accuracy vs. speed for `en`/`hi`/`auto` modes:
+  `tiny`/`base` are fastest, `small` (default) is the best balance on CPU,
+  `medium`/`large-v3` are slower on CPU but more accurate. If you have an
+  NVIDIA GPU, `medium` is a great default (fits comfortably even on 4GB
+  VRAM cards like a GTX 1650); `large-v3` is best reserved for GPUs with
+  more VRAM.
+
+## GPU support
+
+If an NVIDIA GPU is detected (`nvidia-smi` works and ffmpeg has
+`h264_nvenc`), all three scripts automatically use it:
+- `cut_clips.py --reencode` and `add_subtitles.py --burn` encode with
+  `h264_nvenc` instead of CPU `libx264`
+- `add_subtitles.py` and `run_pipeline.py` load Whisper/Hinglish models on
+  CUDA (float16) instead of CPU (int8)
+
+Pass `--no-gpu` to any script to force CPU. If GPU encoding fails at
+runtime for any reason, it automatically retries on CPU and prints a
+message — it won't silently produce a broken file.
+
+Note: `pip install -r requirements.txt` installs the standard torch build
+(supports GPU or CPU). If you don't have an NVIDIA GPU and want a smaller
+download, see the comment in `requirements.txt` for the CPU-only build.
+
+## Full pipeline (one command)
+
+`run_pipeline.py` chains cutting and subtitling together — raw video in,
+captioned clips out:
+
+```
+python run_pipeline.py raw_video.mp4 timestamps.csv -o output --reencode --language hinglish
+```
+
+This writes:
+- `output/clips/` — the cut clips (no captions)
+- `output/captioned/` — matching `.srt` files + `_captioned.mp4` videos with
+  burned-in subtitles
+
+It accepts the same `--language`, `--model`, and `--no-gpu` flags as
+`add_subtitles.py`, plus `--reencode` from `cut_clips.py`.
