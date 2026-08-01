@@ -24,7 +24,7 @@ import add_subtitles
 import cut_clips
 import gpu_utils
 import reframe
-from captions import parse_color
+from captions import CaptionStyle, parse_color
 
 
 def main():
@@ -42,7 +42,14 @@ def main():
     parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial)")
     parser.add_argument("--font-size", type=int, default=64, help="Font size for word/highlight caption styles (default: 64)")
     parser.add_argument("--text-color", default="white", help="Caption text color (default: white)")
-    parser.add_argument("--highlight-color", default="yellow", help="Active-word color for --caption-style highlight (default: yellow)")
+    parser.add_argument("--highlight-color", default="yellow", help="Active-word color for --caption-style highlight/word (default: yellow)")
+    parser.add_argument("--outline-color", default="black", help="Text outline color (default: black)")
+    parser.add_argument("--outline-width", type=int, default=3, help="Text outline width in pixels (default: 3)")
+    parser.add_argument("--no-bold", action="store_true", help="Disable bold (bold is on by default)")
+    parser.add_argument("--italic", action="store_true", help="Italic text")
+    parser.add_argument("--all-caps", action="store_true", help="Render captions in ALL CAPS")
+    parser.add_argument("--box", action="store_true", help="Highlight the active word with a solid colored background box instead of colored text (Opus Clip style)")
+    parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
@@ -59,8 +66,13 @@ def main():
         if not clip_rows:
             sys.exit("No clips found in CSV.")
         cut_clips.validate_clips(clip_rows, args.input)
-        text_rgb = parse_color(args.text_color)
-        highlight_rgb = parse_color(args.highlight_color)
+        style = CaptionStyle(
+            font=args.font, font_size=args.font_size,
+            text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
+            outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
+            bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
+            box=args.box, position=args.position, margin_v=80,
+        )
     except ValueError as e:
         sys.exit(str(e))
 
@@ -113,8 +125,7 @@ def main():
     # --- Step: transcribe + burn ---
     print(f"\n=== Step {step}/{total_steps}: Transcribing ({args.language}) and burning captions ({args.caption_style}) ===")
     common_kwargs = dict(
-        caption_style=args.caption_style, font=args.font, font_size=args.font_size,
-        text_rgb=text_rgb, highlight_rgb=highlight_rgb, margin_v=80, max_words=args.max_words,
+        caption_style=args.caption_style, style=style, max_words=args.max_words,
         burn=True, use_gpu_encode=use_gpu_encode,
     )
     if args.language == "hinglish":

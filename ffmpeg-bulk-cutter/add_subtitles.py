@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 import gpu_utils
-from captions import Word, parse_color, write_ass_highlight_mode, write_ass_word_mode
+from captions import CaptionStyle, Word, parse_color, write_ass_highlight_mode, write_ass_word_mode
 from ffmpeg_utils import get_media_duration, get_video_resolution
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
@@ -202,9 +202,8 @@ def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu:
 
 
 def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, caption_style: str,
-                   language, model=None, pipe=None, font: str, font_size: int,
-                   text_rgb: tuple[int, int, int], highlight_rgb: tuple[int, int, int],
-                   margin_v: int, max_words: int, burn: bool, use_gpu_encode: bool):
+                   language, model=None, pipe=None, style: CaptionStyle = None,
+                   max_words: int, burn: bool, use_gpu_encode: bool):
     print(f"[{i}/{total}] Transcribing {video_path.name}...")
 
     if caption_style == "plain":
@@ -219,9 +218,9 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, cap
         video_res = get_video_resolution(video_path)
         caption_path = output_dir / f"{video_path.stem}.ass"
         if caption_style == "word":
-            count = write_ass_word_mode(words, caption_path, video_res, font, font_size, text_rgb, margin_v)
+            count = write_ass_word_mode(words, caption_path, video_res, style)
         else:
-            count = write_ass_highlight_mode(words, caption_path, video_res, font, font_size, text_rgb, highlight_rgb, margin_v, max_words)
+            count = write_ass_highlight_mode(words, caption_path, video_res, style, max_words)
         print(f"    -> {caption_path} ({count} lines)")
 
     if burn:
@@ -244,7 +243,14 @@ def main():
     parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial). Must be installed on this system.")
     parser.add_argument("--font-size", type=int, default=64, help="Font size for word/highlight caption styles (default: 64)")
     parser.add_argument("--text-color", default="white", help="Caption text color: a name (white/yellow/black/red/green/cyan/blue/orange) or hex like #FFCC00 (default: white)")
-    parser.add_argument("--highlight-color", default="yellow", help="Active-word color for --caption-style highlight (default: yellow)")
+    parser.add_argument("--highlight-color", default="yellow", help="Active-word color for --caption-style highlight/word (default: yellow)")
+    parser.add_argument("--outline-color", default="black", help="Text outline color (default: black)")
+    parser.add_argument("--outline-width", type=int, default=3, help="Text outline width in pixels (default: 3)")
+    parser.add_argument("--no-bold", action="store_true", help="Disable bold (bold is on by default, matching most Reels caption styles)")
+    parser.add_argument("--italic", action="store_true", help="Italic text")
+    parser.add_argument("--all-caps", action="store_true", help="Render captions in ALL CAPS")
+    parser.add_argument("--box", action="store_true", help="Highlight the active word with a solid colored background box instead of just colored text (closer to Opus Clip's look). Uses --highlight-color as the box fill.")
+    parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
@@ -255,8 +261,13 @@ def main():
         sys.exit(f"Input not found: {args.input}")
 
     try:
-        text_rgb = parse_color(args.text_color)
-        highlight_rgb = parse_color(args.highlight_color)
+        style = CaptionStyle(
+            font=args.font, font_size=args.font_size,
+            text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
+            outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
+            bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
+            box=args.box, position=args.position, margin_v=80,
+        )
     except ValueError as e:
         sys.exit(str(e))
 
@@ -275,8 +286,7 @@ def main():
     use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
 
     common_kwargs = dict(
-        caption_style=args.caption_style, font=args.font, font_size=args.font_size,
-        text_rgb=text_rgb, highlight_rgb=highlight_rgb, margin_v=80, max_words=args.max_words,
+        caption_style=args.caption_style, style=style, max_words=args.max_words,
         burn=args.burn, use_gpu_encode=use_gpu_encode,
     )
 

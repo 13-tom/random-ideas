@@ -189,16 +189,43 @@ your GPU regardless of this flag (via `--no-gpu` to disable).
 ```
 python add_subtitles.py clips -o out --caption-style word --burn
 python add_subtitles.py clips -o out --caption-style highlight --highlight-color "#00FFCC" --burn
+python add_subtitles.py clips -o out --caption-style word --box --highlight-color "#FFCC00" --position top --all-caps
 ```
 
 `word`/`highlight` modes write a `.ass` file instead of `.srt` (needed for
-per-word coloring) and support:
+per-word styling) and support:
+
+**Text & color**
 - `--font` — font family, must be installed on your system (default: Arial)
 - `--font-size` — default 64
 - `--text-color` — default white; a name (white/yellow/black/red/green/
   cyan/blue/orange) or a hex code like `#FFCC00`
-- `--highlight-color` — active-word color for `highlight` mode (default: yellow)
+- `--highlight-color` — active-word color for `highlight`/`--box` (default: yellow)
+- `--all-caps` — render captions in ALL CAPS
+
+**Weight & outline**
+- `--no-bold` — bold is on by default (matches most Reels caption styles); disable it
+- `--italic` — italic text
+- `--outline-color` — text outline color (default: black)
+- `--outline-width` — outline width in pixels (default: 3)
+
+**Layout**
+- `--position` — `bottom` (default), `middle`, or `top`
 - `--max-words` — words shown per line in `highlight` mode (default: 5)
+
+**`--box`** — highlights the active word with a solid colored background
+pill instead of just colored text (closer to Opus Clip's actual look than
+plain color-highlighting). Uses `--highlight-color` as the box fill, and
+automatically picks black or white text on top of it, whichever contrasts
+better. Works with both `word` and `highlight` modes.
+
+Getting this right took a genuine debugging pass, not just writing it and
+assuming it worked: ASS's "opaque box" style (`BorderStyle=3`) turned out
+to fill from the *OutlineColour* field, not `BackColour` like the spec
+naming suggests - confirmed by rendering several hand-written variants
+and comparing them, since the box first came out solid black regardless
+of the highlight color requested (verified by reading the rendered
+frames, not just checking the generated `.ass` text looked plausible).
 
 **Note on Hinglish word timing:** the Hinglish model doesn't provide true
 word-level timestamps (it lacks the alignment-head metadata Whisper needs
