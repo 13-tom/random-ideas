@@ -116,27 +116,58 @@ subject.
 python reframe.py clips -o reframed --aspect vertical --track-faces
 ```
 
-Detects faces across the clip (MediaPipe, free, runs on CPU) and pans the
-crop window to follow the largest face, smoothed over time, instead of a
-fixed center window. Falls back automatically to a static center crop if
-no faces are found anywhere in the clip.
+Detects faces across the clip (MediaPipe, free) and pans the crop window
+to follow the subject, smoothed over time, instead of a fixed center
+window. Falls back automatically to a static center crop if no faces are
+found anywhere in the clip.
 
 Requires `opencv-python-headless` + `mediapipe` (see `requirements.txt`).
-It decodes the video twice (once to sample face positions, once to crop),
-so it's slower than the static crop - budget more time for longer clips.
+It decodes the video twice (once to sample faces, once to crop), so it's
+slower than the static crop - budget more time for longer clips.
 
-**A real limitation found while building this, not a hypothetical one:**
-the face detector needs a face to occupy roughly *half* of its input to
-detect reliably - confirmed by testing (a face at 50% of a crop was
-detected, the same face at 39% was not). A full-resolution video frame
-often makes a normally-framed face much smaller than that relative to the
-whole frame, so naive full-frame detection misses faces in ordinary medium
-shots, not just wide ones. This is handled with a tiered fallback: if
-full-frame detection fails, it retries on progressively smaller/zoomed-in
-tiles across the frame until the face is found. This was verified with a
-real test (a face moving across a 1920x1080 frame, confirmed to be
-completely missed by naive full-frame detection, correctly tracked frame
-by frame after the fix) - not just assumed to work.
+**Multiple people in frame → follows whoever's speaking, not just the
+biggest face.** It reads mouth movement over time per person (via face
+landmarks, not just a bounding box) and tracks each person as a separate
+identity across samples. Whoever's mouth is actively moving (not just
+open once) is treated as the active speaker; switching speakers requires
+a clearly sustained difference (hysteresis), so it doesn't flicker between
+people on detection noise.
+
+Face detection itself runs on CPU by default - the model is tiny (a few
+ms/frame), so a GPU wouldn't meaningfully speed it up, and MediaPipe's GPU
+delegate support for desktop Python is inconsistent, especially on
+Windows. Pass `--gpu-detect` to opportunistically try it anyway (falls
+back to CPU automatically if unavailable). Video *encoding* already uses
+your GPU regardless of this flag (via `--no-gpu` to disable).
+
+**Real limitations found while building this, not hypothetical ones:**
+- The face detector needs a face to occupy roughly *half* of its input to
+  detect reliably - confirmed by testing (a face at 50% of a crop was
+  detected, the same face at 39% was not). A full-resolution video frame
+  often makes a normally-framed face much smaller than that relative to
+  the whole frame, so naive full-frame detection misses faces in ordinary
+  medium shots, not just wide ones - confirmed with a single moving face
+  that was completely missed at full-frame resolution.
+- Worse, with **two** people in frame, full-frame detection found only
+  one of them, not zero - so a "retry only if nothing found" fallback
+  wasn't enough; it would have silently ignored the second person. Fixed
+  by always running a tiled scan (not just as an all-faces-missed
+  fallback) and deduplicating overlapping detections of the same face -
+  verified with a real two-person test clip that both people are found
+  and tracked.
+- The active-speaker logic itself had a bug caught by testing: an early
+  version scored "activity" as the full range of a person's recent mouth
+  movement, which kept scoring a person as "active" for a while after
+  they'd already gone quiet (one big earlier jump was still inside the
+  averaging window). Switched to average frame-to-frame movement, which
+  only rewards sustained, current movement - verified with a scripted
+  two-speaker handoff that it now switches correctly.
+- What I *haven't* been able to verify: real two-person footage with
+  actual overlapping conversation (my tests use synthetic mouth-movement
+  data and static photos, since I don't have real multi-speaker video to
+  test against). Try it on your own footage and treat the speaker
+  switching as "best effort" until you've seen it handle a real
+  back-and-forth.
 
 ## Styled captions (word-by-word / highlighted, like Opus Clip)
 

@@ -34,6 +34,7 @@ def main():
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("pipeline_output"), help="Where to write clips/, reframed/, and captioned/ (default: ./pipeline_output)")
     parser.add_argument("--aspect", choices=["original", "square", "vertical"], default="original", help="square = 1:1 feed/carousel, vertical = 9:16 Reels/Stories, original = skip cropping (default)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see reframe.py --help). Ignored if --aspect original.")
+    parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size; ignored when --language hinglish is used (default: small)")
     parser.add_argument("--reencode", action="store_true", help="Frame-accurate cuts (recommended before captioning, since it lines subtitles up with clean clip boundaries)")
@@ -103,7 +104,7 @@ def main():
             suffix = " (tracking faces)" if args.track_faces else ""
             print(f"[{i}/{len(clip_paths)}] {clip_path.name} -> {args.aspect}{suffix}  =>  {output_path}")
             if args.track_faces:
-                face_tracking.track_and_crop(clip_path, output_path, args.aspect, target_res, use_gpu_track, reframe.reframe_video)
+                face_tracking.track_and_crop(clip_path, output_path, args.aspect, target_res, use_gpu_track, reframe.reframe_video, args.gpu_detect)
             else:
                 reframe.reframe_video(clip_path, output_path, args.aspect, use_gpu_encode)
             reframed_paths.append(output_path)
