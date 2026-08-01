@@ -1,9 +1,10 @@
 # FFmpeg Bulk Cutter
 
 Cut many clips out of one video from a CSV list of timestamps, crop them to
-Reels/Stories (9:16) or feed/carousel (1:1) aspect ratio, and generate free
-local subtitles — plain, one-word-at-a-time, or Opus Clip-style highlighted
-captions. Works on Windows, Mac, and Linux, and on any hardware: it runs on
+Reels/Stories (9:16), square (1:1), portrait (4:5), or landscape (16:9)
+aspect ratio, and generate free local subtitles — plain, one-word-at-a-time,
+or Opus Clip-style highlighted captions. Works on Windows, Mac, and Linux,
+and on any hardware: it runs on
 CPU by default, and automatically speeds up using an NVIDIA GPU
 (CUDA/NVENC) if one is detected — no setup needed either way, and it safely
 falls back to CPU if GPU encoding fails for any reason (e.g. a
@@ -97,18 +98,24 @@ Note: `pip install -r requirements.txt` installs the standard torch build
 (supports GPU or CPU). If you don't have an NVIDIA GPU and want a smaller
 download, see the comment in `requirements.txt` for the CPU-only build.
 
-## Aspect ratio cropping (Reels/Stories/Carousel)
+## Aspect ratio cropping
 
 Crop a video (or a folder of clips) to a fixed aspect ratio:
 
 ```
-python reframe.py clips -o reframed --aspect vertical   # 9:16, Reels/Stories
-python reframe.py clips -o reframed --aspect square      # 1:1, feed/carousel
+python reframe.py clips -o reframed --aspect vertical    # 9:16  -> 1080x1920, Reels/Stories/Shorts/TikTok
+python reframe.py clips -o reframed --aspect square       # 1:1   -> 1080x1080, feed post/carousel
+python reframe.py clips -o reframed --aspect portrait      # 4:5   -> 1080x1350, Instagram's own recommended feed ratio
+python reframe.py clips -o reframed --aspect landscape      # 16:9  -> 1920x1080, YouTube/horizontal feed
 ```
 
 By default this is a **centered crop** - works well when the
 speaker/subject is roughly centered in frame, but won't follow a moving
 subject.
+
+Adding another ratio later is a one-line change: `ASPECT_RATIOS` in
+`reframe.py` maps a name to a `(width, height)` ratio tuple - the crop
+expression and target resolution are both derived from it automatically.
 
 ### Smart subject-tracking (`--track-faces`)
 

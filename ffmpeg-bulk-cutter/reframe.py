@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Crop a video (or a whole folder of clips) to a fixed aspect ratio for
-Instagram Reels/Stories (9:16 vertical) or feed posts/carousels (1:1 square).
+"""Crop a video (or a whole folder of clips) to a fixed aspect ratio.
+
+Available --aspect values:
+    vertical   9:16   Reels / Stories / Shorts / TikTok    -> 1080x1920
+    square     1:1    Feed post / carousel                 -> 1080x1080
+    portrait   4:5    Instagram feed portrait (their own recommended ratio) -> 1080x1350
+    landscape  16:9   YouTube / horizontal feed             -> 1920x1080
 
 Usage:
     python reframe.py clips/intro.mp4 --aspect vertical
-    python reframe.py clips -o reframed --aspect square
+    python reframe.py clips -o reframed --aspect portrait
     python reframe.py clips -o reframed --aspect vertical --track-faces
 
 By default this does a CENTERED crop - works well when the speaker/subject
@@ -37,12 +42,33 @@ import gpu_utils
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
-# (crop filter expression, output resolution) per aspect ratio.
-# crop expressions assume a landscape source (width >= target); ffmpeg's
-# crop filter centers by default when x/y are omitted.
+# name -> (ratio_w, ratio_h). Crop expression and target resolution are
+# both derived from this ratio - add an entry here to support another
+# platform's aspect ratio, nothing else needs to change.
+ASPECT_RATIOS = {
+    "vertical": (9, 16),    # Reels / Stories / Shorts / TikTok
+    "square": (1, 1),       # Feed post / carousel
+    "portrait": (4, 5),     # Instagram's own recommended feed ratio
+    "landscape": (16, 9),   # YouTube / horizontal feed
+}
+
+
+def _target_resolution(ratio_w: int, ratio_h: int) -> str:
+    if ratio_w <= ratio_h:
+        width, height = 1080, round(1080 * ratio_h / ratio_w)
+    else:
+        height, width = 1080, round(1080 * ratio_w / ratio_h)
+    width -= width % 2  # even dimensions required by most encoders
+    height -= height % 2
+    return f"{width}:{height}"
+
+
+# (crop filter expression, output resolution) per aspect ratio. Crop
+# expressions assume a landscape source (width >= target); ffmpeg's crop
+# filter centers by default when x/y are omitted.
 ASPECT_PRESETS = {
-    "square": ("crop='min(iw,ih)':'min(iw,ih)'", "1080:1080"),
-    "vertical": ("crop='min(iw,ih*9/16)':'min(ih,iw*16/9)'", "1080:1920"),
+    name: (f"crop='min(iw,ih*{w}/{h})':'min(ih,iw*{h}/{w})'", _target_resolution(w, h))
+    for name, (w, h) in ASPECT_RATIOS.items()
 }
 
 
@@ -66,7 +92,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", type=Path, help="A video file, or a folder of video clips")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("reframed"), help="Where to write reframed videos (default: ./reframed)")
-    parser.add_argument("--aspect", choices=["square", "vertical"], required=True, help="square = 1:1 (feed/carousel), vertical = 9:16 (Reels/Stories)")
+    parser.add_argument("--aspect", choices=list(ASPECT_RATIOS), required=True, help="vertical = 9:16 (Reels/Stories/Shorts), square = 1:1 (feed/carousel), portrait = 4:5 (IG feed), landscape = 16:9 (YouTube)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see module docstring)")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")

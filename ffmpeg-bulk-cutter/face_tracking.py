@@ -18,6 +18,8 @@ from urllib.request import urlretrieve
 
 import numpy as np
 
+from reframe import ASPECT_RATIOS
+
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
 FACE_MODEL_CACHE = Path.home() / ".cache" / "ffmpeg-bulk-cutter" / "face_landmarker.task"
 
@@ -164,12 +166,9 @@ def _detect_faces_in_frame(landmarker, mp, frame_bgr):
 
 
 def crop_dimensions(aspect: str, src_w: int, src_h: int) -> tuple[int, int]:
-    if aspect == "square":
-        size = min(src_w, src_h)
-        crop_w = crop_h = size
-    else:  # vertical
-        crop_h = src_h
-        crop_w = min(src_w, round(src_h * 9 / 16))
+    ratio_w, ratio_h = ASPECT_RATIOS[aspect]
+    crop_w = min(src_w, round(src_h * ratio_w / ratio_h))
+    crop_h = min(src_h, round(src_w * ratio_h / ratio_w))
     crop_w -= crop_w % 2
     crop_h -= crop_h % 2
     return crop_w, crop_h

@@ -32,7 +32,7 @@ def main():
     parser.add_argument("input", type=Path, help="Raw source video")
     parser.add_argument("timestamps", type=Path, help="CSV file with start,end[,label] rows")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("pipeline_output"), help="Where to write clips/, reframed/, and captioned/ (default: ./pipeline_output)")
-    parser.add_argument("--aspect", choices=["original", "square", "vertical"], default="original", help="square = 1:1 feed/carousel, vertical = 9:16 Reels/Stories, original = skip cropping (default)")
+    parser.add_argument("--aspect", choices=["original", *reframe.ASPECT_RATIOS], default="original", help="vertical = 9:16 Reels/Stories/Shorts, square = 1:1 feed/carousel, portrait = 4:5 IG feed, landscape = 16:9 YouTube, original = skip cropping (default)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see reframe.py --help). Ignored if --aspect original.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
