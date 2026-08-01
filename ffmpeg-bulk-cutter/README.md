@@ -1,10 +1,12 @@
 # FFmpeg Bulk Cutter
 
-Cut many clips out of one video from a CSV list of timestamps, then generate
-free local subtitles for them. Works on Windows, Mac, and Linux, and on any
-hardware: it runs on CPU by default, and automatically speeds up using an
-NVIDIA GPU (CUDA/NVENC) if one is detected — no setup needed either way, and
-it safely falls back to CPU if GPU encoding fails for any reason (e.g. a
+Cut many clips out of one video from a CSV list of timestamps, crop them to
+Reels/Stories (9:16) or feed/carousel (1:1) aspect ratio, and generate free
+local subtitles — plain, one-word-at-a-time, or Opus Clip-style highlighted
+captions. Works on Windows, Mac, and Linux, and on any hardware: it runs on
+CPU by default, and automatically speeds up using an NVIDIA GPU
+(CUDA/NVENC) if one is detected — no setup needed either way, and it safely
+falls back to CPU if GPU encoding fails for any reason (e.g. a
 missing/outdated driver).
 
 ## Setup
@@ -95,19 +97,68 @@ Note: `pip install -r requirements.txt` installs the standard torch build
 (supports GPU or CPU). If you don't have an NVIDIA GPU and want a smaller
 download, see the comment in `requirements.txt` for the CPU-only build.
 
-## Full pipeline (one command)
+## Aspect ratio cropping (Reels/Stories/Carousel)
 
-`run_pipeline.py` chains cutting and subtitling together — raw video in,
-captioned clips out:
+Crop a video (or a folder of clips) to a fixed aspect ratio:
 
 ```
-python run_pipeline.py raw_video.mp4 timestamps.csv -o output --reencode --language hinglish
+python reframe.py clips -o reframed --aspect vertical   # 9:16, Reels/Stories
+python reframe.py clips -o reframed --aspect square      # 1:1, feed/carousel
+```
+
+This is a **centered crop**, not smart subject-tracking - it works well
+when the speaker/subject is roughly centered in frame (typical
+talking-head footage), but it won't follow a moving subject around the
+frame the way Opus Clip's face-tracking auto-reframe does. That's a
+separate, harder feature (needs face detection) that isn't built yet.
+
+## Styled captions (word-by-word / highlighted, like Opus Clip)
+
+`add_subtitles.py --caption-style` controls how captions look:
+
+- `plain` (default) — one `.srt` line per sentence, static text. Best for
+  importing into Premiere/Resolve as an editable subtitle track.
+- `word` — one word on screen at a time, big and bold (TikTok/CapCut style).
+- `highlight` — a few words shown together, with the word currently being
+  spoken highlighted in a different color (Opus Clip style, karaoke-style).
+
+```
+python add_subtitles.py clips -o out --caption-style word --burn
+python add_subtitles.py clips -o out --caption-style highlight --highlight-color "#00FFCC" --burn
+```
+
+`word`/`highlight` modes write a `.ass` file instead of `.srt` (needed for
+per-word coloring) and support:
+- `--font` — font family, must be installed on your system (default: Arial)
+- `--font-size` — default 64
+- `--text-color` — default white; a name (white/yellow/black/red/green/
+  cyan/blue/orange) or a hex code like `#FFCC00`
+- `--highlight-color` — active-word color for `highlight` mode (default: yellow)
+- `--max-words` — words shown per line in `highlight` mode (default: 5)
+
+**Note on Hinglish word timing:** the Hinglish model doesn't provide true
+word-level timestamps (it lacks the alignment-head metadata Whisper needs
+for that), so `word`/`highlight` modes for `--language hinglish` use timing
+*interpolated* proportionally across each sentence rather than the model's
+own per-word alignment. It reads fine on screen, but isn't frame-perfect
+the way the English/Hindi path (faster-whisper, which does give real
+per-word timestamps) is.
+
+## Full pipeline (one command)
+
+`run_pipeline.py` chains cutting, reframing, and subtitling together — raw
+video in, captioned Reels-ready clips out:
+
+```
+python run_pipeline.py raw_video.mp4 timestamps.csv -o output \
+  --aspect vertical --language hinglish --caption-style highlight --reencode
 ```
 
 This writes:
-- `output/clips/` — the cut clips (no captions)
-- `output/captioned/` — matching `.srt` files + `_captioned.mp4` videos with
-  burned-in subtitles
+- `output/clips/` — the cut clips (original aspect ratio, no captions)
+- `output/reframed/` — clips cropped to `--aspect` (skipped if `--aspect original`, the default)
+- `output/captioned/` — caption files + `_captioned.mp4` videos, ready to post
 
-It accepts the same `--language`, `--model`, and `--no-gpu` flags as
-`add_subtitles.py`, plus `--reencode` from `cut_clips.py`.
+It accepts the same `--language`, `--model`, `--caption-style` (and its
+font/color flags), and `--no-gpu` flags as `add_subtitles.py`, plus
+`--reencode` from `cut_clips.py` and `--aspect` from `reframe.py`.

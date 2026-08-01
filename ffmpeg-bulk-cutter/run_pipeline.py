@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""End-to-end pipeline: raw video -> cut clips -> transcribe -> burn captions.
+"""End-to-end pipeline: raw video -> cut clips -> reframe -> burn captions.
 
 Usage:
     python run_pipeline.py raw.mp4 timestamps.csv -o output
-    python run_pipeline.py raw.mp4 timestamps.csv -o output --language hinglish
-    python run_pipeline.py raw.mp4 timestamps.csv -o output --language en --model medium --reencode
+    python run_pipeline.py raw.mp4 timestamps.csv -o output --aspect vertical --language hinglish
+    python run_pipeline.py raw.mp4 timestamps.csv -o output --caption-style highlight --highlight-color "#00FFCC"
 
-Runs cut_clips.py and add_subtitles.py back to back:
-    output/clips/       - the cut clips (silent, no captions)
-    output/captioned/   - matching .srt files + captioned/burned-in videos
+Runs cut_clips.py, reframe.py, and add_subtitles.py back to back:
+    output/clips/       - the cut clips (silent, no captions, original aspect)
+    output/reframed/    - clips cropped to --aspect (skipped if --aspect original)
+    output/captioned/   - caption files + burned-in videos, ready to post
 
 Automatically uses an NVIDIA GPU for encoding and transcription if one is
 detected, falling back to CPU otherwise (see gpu_utils.py). Use --no-gpu to
@@ -22,16 +23,25 @@ from pathlib import Path
 import add_subtitles
 import cut_clips
 import gpu_utils
+import reframe
+from captions import parse_color
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", type=Path, help="Raw source video")
     parser.add_argument("timestamps", type=Path, help="CSV file with start,end[,label] rows")
-    parser.add_argument("-o", "--output-dir", type=Path, default=Path("pipeline_output"), help="Where to write clips/ and captioned/ (default: ./pipeline_output)")
+    parser.add_argument("-o", "--output-dir", type=Path, default=Path("pipeline_output"), help="Where to write clips/, reframed/, and captioned/ (default: ./pipeline_output)")
+    parser.add_argument("--aspect", choices=["original", "square", "vertical"], default="original", help="square = 1:1 feed/carousel, vertical = 9:16 Reels/Stories, original = skip cropping (default)")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size; ignored when --language hinglish is used (default: small)")
     parser.add_argument("--reencode", action="store_true", help="Frame-accurate cuts (recommended before captioning, since it lines subtitles up with clean clip boundaries)")
+    parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain", help="See add_subtitles.py --help for details (default: plain)")
+    parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial)")
+    parser.add_argument("--font-size", type=int, default=64, help="Font size for word/highlight caption styles (default: 64)")
+    parser.add_argument("--text-color", default="white", help="Caption text color (default: white)")
+    parser.add_argument("--highlight-color", default="yellow", help="Active-word color for --caption-style highlight (default: yellow)")
+    parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
 
@@ -47,6 +57,8 @@ def main():
         if not clip_rows:
             sys.exit("No clips found in CSV.")
         cut_clips.validate_clips(clip_rows, args.input)
+        text_rgb = parse_color(args.text_color)
+        highlight_rgb = parse_color(args.highlight_color)
     except ValueError as e:
         sys.exit(str(e))
 
@@ -58,10 +70,13 @@ def main():
     captioned_dir = args.output_dir / "captioned"
     clips_dir.mkdir(parents=True, exist_ok=True)
     captioned_dir.mkdir(parents=True, exist_ok=True)
+    total_steps = 3 if args.aspect != "original" else 2
+    step = 1
 
-    # --- Step 1: cut ---
-    print(f"=== Step 1/2: Cutting {len(clip_rows)} clip(s) "
+    # --- Step: cut ---
+    print(f"=== Step {step}/{total_steps}: Cutting {len(clip_rows)} clip(s) "
           f"({'GPU encode' if use_gpu_encode and args.reencode else 'CPU encode' if args.reencode else 'stream copy'}) ===")
+    step += 1
     suffix = args.input.suffix
     clip_paths = []
     for i, (start, end, label) in enumerate(clip_rows, start=1):
@@ -71,29 +86,38 @@ def main():
         cut_clips.cut_clip(args.input, start, end, output_path, args.reencode, use_gpu_encode)
         clip_paths.append(output_path)
 
-    # --- Step 2: transcribe + burn ---
-    print(f"\n=== Step 2/2: Transcribing ({args.language}) and burning captions ===")
+    # --- Step: reframe (optional) ---
+    if args.aspect != "original":
+        print(f"\n=== Step {step}/{total_steps}: Reframing to {args.aspect} ===")
+        step += 1
+        reframed_dir = args.output_dir / "reframed"
+        reframed_dir.mkdir(parents=True, exist_ok=True)
+        reframed_paths = []
+        for i, clip_path in enumerate(clip_paths, start=1):
+            output_path = reframed_dir / clip_path.name
+            print(f"[{i}/{len(clip_paths)}] {clip_path.name} -> {args.aspect}  =>  {output_path}")
+            reframe.reframe_video(clip_path, output_path, args.aspect, use_gpu_encode)
+            reframed_paths.append(output_path)
+        clip_paths = reframed_paths
+
+    # --- Step: transcribe + burn ---
+    print(f"\n=== Step {step}/{total_steps}: Transcribing ({args.language}) and burning captions ({args.caption_style}) ===")
+    common_kwargs = dict(
+        caption_style=args.caption_style, font=args.font, font_size=args.font_size,
+        text_rgb=text_rgb, highlight_rgb=highlight_rgb, margin_v=80, max_words=args.max_words,
+        burn=True, use_gpu_encode=use_gpu_encode,
+    )
     if args.language == "hinglish":
         pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper)
-        def transcribe(video_path, srt_path):
-            return add_subtitles.transcribe_to_srt_hinglish(pipe, video_path, srt_path)
+        for i, clip_path in enumerate(clip_paths, start=1):
+            add_subtitles.process_video(clip_path, captioned_dir, i, len(clip_paths), language=None, pipe=pipe, **common_kwargs)
     else:
         model = add_subtitles.load_whisper_model(args.model, use_gpu_whisper)
         language = None if args.language == "auto" else args.language
-        def transcribe(video_path, srt_path):
-            return add_subtitles.transcribe_to_srt(model, video_path, srt_path, language)
+        for i, clip_path in enumerate(clip_paths, start=1):
+            add_subtitles.process_video(clip_path, captioned_dir, i, len(clip_paths), language=language, model=model, **common_kwargs)
 
-    for i, clip_path in enumerate(clip_paths, start=1):
-        srt_path = captioned_dir / f"{clip_path.stem}.srt"
-        print(f"[{i}/{len(clip_paths)}] Transcribing {clip_path.name}...")
-        count, _ = transcribe(clip_path, srt_path)
-        print(f"    -> {srt_path} ({count} lines)")
-
-        burned_path = captioned_dir / f"{clip_path.stem}_captioned{clip_path.suffix}"
-        add_subtitles.burn_subtitles(clip_path, srt_path, burned_path, use_gpu_encode)
-        print(f"    -> {burned_path}")
-
-    print(f"\nDone. Clips in {clips_dir}/, captioned videos in {captioned_dir}/")
+    print(f"\nDone. Final captioned videos in {captioned_dir}/")
 
 
 if __name__ == "__main__":

@@ -30,7 +30,8 @@ import sys
 from pathlib import Path
 
 import gpu_utils
-from ffmpeg_utils import get_media_duration
+from captions import Word, parse_color, write_ass_highlight_mode, write_ass_word_mode
+from ffmpeg_utils import get_media_duration, get_video_resolution
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 HINGLISH_MODEL_ID = "Oriserve/Whisper-Hindi2Hinglish-Swift"
@@ -124,6 +125,56 @@ def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
     return count, "hinglish"
 
 
+def get_words_faster_whisper(model, video_path: Path, language: str | None) -> tuple[list[Word], str]:
+    segments, info = model.transcribe(
+        str(video_path),
+        language=language,
+        vad_filter=True,
+        word_timestamps=True,
+    )
+    words = []
+    for segment in segments:
+        for w in segment.words:
+            text = w.word.strip()
+            if text:
+                words.append(Word(w.start, w.end, text))
+    return words, info.language
+
+
+def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
+    """This fine-tuned checkpoint doesn't support true word-level alignment
+    (it has no Whisper alignment-head metadata, so return_timestamps='word'
+    crashes). Instead, take its sentence-level chunk timestamps and
+    interpolate per-word timing proportionally by character length -
+    approximate, but reads fine for on-screen captions.
+    """
+    result = pipe(
+        str(video_path),
+        return_timestamps=True,
+        generate_kwargs={"task": "transcribe", "language": "en"},
+    )
+    chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
+    duration = get_media_duration(video_path)
+
+    words = []
+    for i, chunk in enumerate(chunks):
+        start, end = chunk["timestamp"]
+        start = start or 0.0
+        if end is None:
+            end = chunks[i + 1]["timestamp"][0] if i + 1 < len(chunks) else duration
+        chunk_words = chunk["text"].strip().split()
+        if not chunk_words:
+            continue
+        total_chars = sum(len(w) for w in chunk_words) or 1
+        span = end - start
+        cursor = start
+        for w in chunk_words:
+            portion = (len(w) / total_chars) * span
+            words.append(Word(cursor, cursor + portion, w))
+            cursor += portion
+    return words
+
+
 def _escape_subtitles_path(srt_path: Path) -> str:
     # ffmpeg's -vf filtergraph parser treats ':' as an option separator and
     # '\' as its own escape character, so a doubled-backslash escape gets
@@ -150,13 +201,51 @@ def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu:
     subprocess.run(cpu_cmd, check=True)
 
 
+def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, caption_style: str,
+                   language, model=None, pipe=None, font: str, font_size: int,
+                   text_rgb: tuple[int, int, int], highlight_rgb: tuple[int, int, int],
+                   margin_v: int, max_words: int, burn: bool, use_gpu_encode: bool):
+    print(f"[{i}/{total}] Transcribing {video_path.name}...")
+
+    if caption_style == "plain":
+        caption_path = output_dir / f"{video_path.stem}.srt"
+        if pipe is not None:
+            count, _ = transcribe_to_srt_hinglish(pipe, video_path, caption_path)
+        else:
+            count, detected = transcribe_to_srt(model, video_path, caption_path, language)
+        print(f"    -> {caption_path} ({count} lines)")
+    else:
+        words = get_words_hinglish(pipe, video_path) if pipe is not None else get_words_faster_whisper(model, video_path, language)[0]
+        video_res = get_video_resolution(video_path)
+        caption_path = output_dir / f"{video_path.stem}.ass"
+        if caption_style == "word":
+            count = write_ass_word_mode(words, caption_path, video_res, font, font_size, text_rgb, margin_v)
+        else:
+            count = write_ass_highlight_mode(words, caption_path, video_res, font, font_size, text_rgb, highlight_rgb, margin_v, max_words)
+        print(f"    -> {caption_path} ({count} lines)")
+
+    if burn:
+        burned_path = output_dir / f"{video_path.stem}_captioned{video_path.suffix}"
+        burn_subtitles(video_path, caption_path, burned_path, use_gpu_encode)
+        print(f"    -> {burned_path} (captions burned in)")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", type=Path, help="A video file, or a folder of video clips")
-    parser.add_argument("-o", "--output-dir", type=Path, default=Path("subtitled"), help="Where to write .srt files (and burned videos) (default: ./subtitled)")
+    parser.add_argument("-o", "--output-dir", type=Path, default=Path("subtitled"), help="Where to write caption files (and burned videos) (default: ./subtitled)")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="Force a language, auto-detect, or 'hinglish' for Roman-script Hindi+English (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size (default: small - best speed/accuracy balance on CPU). Ignored when --language hinglish is used.")
     parser.add_argument("--burn", action="store_true", help="Also produce a copy of the video with subtitles burned in")
+    parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain",
+                         help="plain = one .srt line per sentence (default, matches Premiere/Resolve import). "
+                              "word = one word on screen at a time (TikTok/CapCut style). "
+                              "highlight = full line shown with the currently-spoken word highlighted (Opus Clip style).")
+    parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial). Must be installed on this system.")
+    parser.add_argument("--font-size", type=int, default=64, help="Font size for word/highlight caption styles (default: 64)")
+    parser.add_argument("--text-color", default="white", help="Caption text color: a name (white/yellow/black/red/green/cyan/blue/orange) or hex like #FFCC00 (default: white)")
+    parser.add_argument("--highlight-color", default="yellow", help="Active-word color for --caption-style highlight (default: yellow)")
+    parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
 
@@ -164,6 +253,12 @@ def main():
         sys.exit("ffmpeg not found on PATH. Install it first: https://ffmpeg.org/download.html")
     if not args.input.exists():
         sys.exit(f"Input not found: {args.input}")
+
+    try:
+        text_rgb = parse_color(args.text_color)
+        highlight_rgb = parse_color(args.highlight_color)
+    except ValueError as e:
+        sys.exit(str(e))
 
     if args.input.is_dir():
         videos = sorted(p for p in args.input.iterdir() if p.suffix.lower() in VIDEO_EXTENSIONS)
@@ -179,6 +274,12 @@ def main():
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
     use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
 
+    common_kwargs = dict(
+        caption_style=args.caption_style, font=args.font, font_size=args.font_size,
+        text_rgb=text_rgb, highlight_rgb=highlight_rgb, margin_v=80, max_words=args.max_words,
+        burn=args.burn, use_gpu_encode=use_gpu_encode,
+    )
+
     if args.language == "hinglish":
         try:
             from transformers import pipeline  # noqa: F401
@@ -186,40 +287,18 @@ def main():
             sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
 
         pipe = load_hinglish_pipeline(use_gpu_whisper)
-
         for i, video_path in enumerate(videos, start=1):
-            srt_path = args.output_dir / f"{video_path.stem}.srt"
-            print(f"[{i}/{len(videos)}] Transcribing {video_path.name} (hinglish)...")
-            count, detected_language = transcribe_to_srt_hinglish(pipe, video_path, srt_path)
-            print(f"    -> {srt_path} ({count} lines)")
+            process_video(video_path, args.output_dir, i, len(videos), language=None, pipe=pipe, **common_kwargs)
+    else:
+        try:
+            from faster_whisper import WhisperModel  # noqa: F401
+        except ImportError:
+            sys.exit("faster-whisper is not installed. Run: pip install faster-whisper")
 
-            if args.burn:
-                burned_path = args.output_dir / f"{video_path.stem}_captioned{video_path.suffix}"
-                burn_subtitles(video_path, srt_path, burned_path, use_gpu_encode)
-                print(f"    -> {burned_path} (captions burned in)")
-
-        print(f"\nDone. Output in {args.output_dir}/")
-        return
-
-    try:
-        from faster_whisper import WhisperModel  # noqa: F401
-    except ImportError:
-        sys.exit("faster-whisper is not installed. Run: pip install faster-whisper")
-
-    model = load_whisper_model(args.model, use_gpu_whisper)
-
-    language = None if args.language == "auto" else args.language
-
-    for i, video_path in enumerate(videos, start=1):
-        srt_path = args.output_dir / f"{video_path.stem}.srt"
-        print(f"[{i}/{len(videos)}] Transcribing {video_path.name}...")
-        count, detected_language = transcribe_to_srt(model, video_path, srt_path, language)
-        print(f"    -> {srt_path} ({count} lines, language: {detected_language})")
-
-        if args.burn:
-            burned_path = args.output_dir / f"{video_path.stem}_captioned{video_path.suffix}"
-            burn_subtitles(video_path, srt_path, burned_path, use_gpu_encode)
-            print(f"    -> {burned_path} (captions burned in)")
+        model = load_whisper_model(args.model, use_gpu_whisper)
+        language = None if args.language == "auto" else args.language
+        for i, video_path in enumerate(videos, start=1):
+            process_video(video_path, args.output_dir, i, len(videos), language=language, model=model, **common_kwargs)
 
     print(f"\nDone. Output in {args.output_dir}/")
 

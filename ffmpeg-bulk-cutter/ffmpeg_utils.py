@@ -12,3 +12,12 @@ def get_media_duration(path: Path) -> float:
         capture_output=True, text=True, check=True,
     )
     return float(json.loads(result.stdout)["format"]["duration"])
+
+
+def get_video_resolution(path: Path) -> tuple[int, int]:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    stream = json.loads(result.stdout)["streams"][0]
+    return stream["width"], stream["height"]
