@@ -14,3 +14,8 @@ transformers
 # If you do NOT have an NVIDIA GPU and want a smaller download instead,
 # comment out "torch" above and uncomment this CPU-only build:
 # torch --index-url https://download.pytorch.org/whl/cpu
+
+# Only needed for reframe.py --track-faces (smart subject-tracking crop).
+# CPU-only, no torch needed - detection runs fine without a GPU.
+opencv-python-headless
+mediapipe

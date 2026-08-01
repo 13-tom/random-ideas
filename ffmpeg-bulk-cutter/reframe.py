@@ -2,14 +2,22 @@
 """Crop a video (or a whole folder of clips) to a fixed aspect ratio for
 Instagram Reels/Stories (9:16 vertical) or feed posts/carousels (1:1 square).
 
-This does a CENTERED crop, not smart subject-tracking - it works well when
-the speaker/subject is roughly centered in frame (typical talking-head
-footage), but it won't follow a moving subject. Face-tracking auto-reframe
-(what Opus Clip does) is a separate, harder feature.
-
 Usage:
     python reframe.py clips/intro.mp4 --aspect vertical
     python reframe.py clips -o reframed --aspect square
+    python reframe.py clips -o reframed --aspect vertical --track-faces
+
+By default this does a CENTERED crop - works well when the speaker/subject
+is roughly centered in frame (typical talking-head footage), but it won't
+follow a moving subject.
+
+--track-faces switches to smart subject-tracking: it detects faces across
+the clip (MediaPipe) and pans the crop window to follow the largest face,
+smoothed over time. Falls back to a static center crop automatically if no
+faces are found. This is CPU-only (no GPU acceleration for the detection
+step itself) and decodes the video twice, so it's noticeably slower than
+the static crop - budget more time for longer clips. Requires
+opencv-python-headless + mediapipe (see requirements.txt).
 """
 import argparse
 import shutil
@@ -51,6 +59,7 @@ def main():
     parser.add_argument("input", type=Path, help="A video file, or a folder of video clips")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("reframed"), help="Where to write reframed videos (default: ./reframed)")
     parser.add_argument("--aspect", choices=["square", "vertical"], required=True, help="square = 1:1 (feed/carousel), vertical = 9:16 (Reels/Stories)")
+    parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see module docstring)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
 
@@ -67,13 +76,22 @@ def main():
     if not videos:
         sys.exit(f"No video files found in {args.input}")
 
-    use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    for i, video_path in enumerate(videos, start=1):
-        output_path = args.output_dir / video_path.name
-        print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect}  =>  {output_path}")
-        reframe_video(video_path, output_path, args.aspect, use_gpu)
+    if args.track_faces:
+        import face_tracking
+        target_res = ASPECT_PRESETS[args.aspect][1]
+        use_gpu = not args.no_gpu and gpu_utils.nvenc_works()
+        for i, video_path in enumerate(videos, start=1):
+            output_path = args.output_dir / video_path.name
+            print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect} (tracking faces)  =>  {output_path}")
+            face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video)
+    else:
+        use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
+        for i, video_path in enumerate(videos, start=1):
+            output_path = args.output_dir / video_path.name
+            print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect}  =>  {output_path}")
+            reframe_video(video_path, output_path, args.aspect, use_gpu)
 
     print(f"\nDone. {len(videos)} video(s) written to {args.output_dir}/")
 

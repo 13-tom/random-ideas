@@ -33,6 +33,7 @@ def main():
     parser.add_argument("timestamps", type=Path, help="CSV file with start,end[,label] rows")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("pipeline_output"), help="Where to write clips/, reframed/, and captioned/ (default: ./pipeline_output)")
     parser.add_argument("--aspect", choices=["original", "square", "vertical"], default="original", help="square = 1:1 feed/carousel, vertical = 9:16 Reels/Stories, original = skip cropping (default)")
+    parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see reframe.py --help). Ignored if --aspect original.")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size; ignored when --language hinglish is used (default: small)")
     parser.add_argument("--reencode", action="store_true", help="Frame-accurate cuts (recommended before captioning, since it lines subtitles up with clean clip boundaries)")
@@ -93,10 +94,18 @@ def main():
         reframed_dir = args.output_dir / "reframed"
         reframed_dir.mkdir(parents=True, exist_ok=True)
         reframed_paths = []
+        if args.track_faces:
+            import face_tracking
+            target_res = reframe.ASPECT_PRESETS[args.aspect][1]
+            use_gpu_track = not args.no_gpu and gpu_utils.nvenc_works()
         for i, clip_path in enumerate(clip_paths, start=1):
             output_path = reframed_dir / clip_path.name
-            print(f"[{i}/{len(clip_paths)}] {clip_path.name} -> {args.aspect}  =>  {output_path}")
-            reframe.reframe_video(clip_path, output_path, args.aspect, use_gpu_encode)
+            suffix = " (tracking faces)" if args.track_faces else ""
+            print(f"[{i}/{len(clip_paths)}] {clip_path.name} -> {args.aspect}{suffix}  =>  {output_path}")
+            if args.track_faces:
+                face_tracking.track_and_crop(clip_path, output_path, args.aspect, target_res, use_gpu_track, reframe.reframe_video)
+            else:
+                reframe.reframe_video(clip_path, output_path, args.aspect, use_gpu_encode)
             reframed_paths.append(output_path)
         clip_paths = reframed_paths
 

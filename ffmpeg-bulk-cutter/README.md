@@ -106,11 +106,37 @@ python reframe.py clips -o reframed --aspect vertical   # 9:16, Reels/Stories
 python reframe.py clips -o reframed --aspect square      # 1:1, feed/carousel
 ```
 
-This is a **centered crop**, not smart subject-tracking - it works well
-when the speaker/subject is roughly centered in frame (typical
-talking-head footage), but it won't follow a moving subject around the
-frame the way Opus Clip's face-tracking auto-reframe does. That's a
-separate, harder feature (needs face detection) that isn't built yet.
+By default this is a **centered crop** - works well when the
+speaker/subject is roughly centered in frame, but won't follow a moving
+subject.
+
+### Smart subject-tracking (`--track-faces`)
+
+```
+python reframe.py clips -o reframed --aspect vertical --track-faces
+```
+
+Detects faces across the clip (MediaPipe, free, runs on CPU) and pans the
+crop window to follow the largest face, smoothed over time, instead of a
+fixed center window. Falls back automatically to a static center crop if
+no faces are found anywhere in the clip.
+
+Requires `opencv-python-headless` + `mediapipe` (see `requirements.txt`).
+It decodes the video twice (once to sample face positions, once to crop),
+so it's slower than the static crop - budget more time for longer clips.
+
+**A real limitation found while building this, not a hypothetical one:**
+the face detector needs a face to occupy roughly *half* of its input to
+detect reliably - confirmed by testing (a face at 50% of a crop was
+detected, the same face at 39% was not). A full-resolution video frame
+often makes a normally-framed face much smaller than that relative to the
+whole frame, so naive full-frame detection misses faces in ordinary medium
+shots, not just wide ones. This is handled with a tiered fallback: if
+full-frame detection fails, it retries on progressively smaller/zoomed-in
+tiles across the frame until the face is found. This was verified with a
+real test (a face moving across a 1920x1080 frame, confirmed to be
+completely missed by naive full-frame detection, correctly tracked frame
+by frame after the fix) - not just assumed to work.
 
 ## Styled captions (word-by-word / highlighted, like Opus Clip)
 
@@ -151,7 +177,7 @@ video in, captioned Reels-ready clips out:
 
 ```
 python run_pipeline.py raw_video.mp4 timestamps.csv -o output \
-  --aspect vertical --language hinglish --caption-style highlight --reencode
+  --aspect vertical --track-faces --language hinglish --caption-style highlight --reencode
 ```
 
 This writes:
@@ -161,4 +187,5 @@ This writes:
 
 It accepts the same `--language`, `--model`, `--caption-style` (and its
 font/color flags), and `--no-gpu` flags as `add_subtitles.py`, plus
-`--reencode` from `cut_clips.py` and `--aspect` from `reframe.py`.
+`--reencode` from `cut_clips.py` and `--aspect`/`--track-faces` from
+`reframe.py`.
