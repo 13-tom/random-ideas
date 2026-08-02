@@ -132,6 +132,17 @@ Requires `opencv-python-headless` + `mediapipe` (see `requirements.txt`).
 It decodes the video twice (once to sample faces, once to crop), so it's
 slower than the static crop - budget more time for longer clips.
 
+**Zooms in and frames with headroom, not just a raw aspect-ratio slice.**
+A crop that only just fits the target aspect ratio around the full source
+frame often has nowhere to vertically reposition at all (e.g. a 16:9
+source cropped to 9:16 already needs the full source height, so whatever
+headroom existed in the original shot is exactly what you get - caught
+this from a real clip where the subject's head ended up jammed against
+the top edge). `--track-faces` zooms in further and centers the crop so
+the tracked face sits in the upper third with room above the head and
+more room below for chest/shoulders, using the actual tracked vertical
+position rather than an untouched full-height crop.
+
 **Multiple people in frame → follows whoever's speaking, not just the
 biggest face.** It reads mouth movement over time per person (via face
 landmarks, not just a bounding box) and tracks each person as a separate

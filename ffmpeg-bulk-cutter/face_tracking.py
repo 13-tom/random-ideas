@@ -27,6 +27,16 @@ SAMPLE_INTERVAL_SEC = 0.4
 SMOOTHING_WINDOW = 7
 MOUTH_HISTORY_LEN = 6
 MAX_FACES = 5
+# A crop that just fits the target aspect ratio around the full source
+# frame often leaves zero room to vertically reposition (e.g. a 16:9
+# source cropped to 9:16 already uses the full source height, so the
+# face's actual vertical position can't be honored - confirmed visually:
+# heads ended up jammed against the top edge). Zooming in a bit creates
+# slack to recenter on the face, and HEADROOM_FRACTION biases that
+# placement so the face sits in the upper third with headroom above it
+# and more room below for chest/shoulders, instead of dead-center.
+TRACK_ZOOM = 0.72
+HEADROOM_FRACTION = 0.38
 # Mouth landmark indices in MediaPipe's 478-point face mesh: inner lip
 # top/bottom (vertical gap = how open the mouth is) and left/right corners
 # (mouth width, used to normalize the gap so it's scale-invariant).
@@ -315,6 +325,14 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         return False
 
     crop_w, crop_h = crop_dimensions(aspect, src_w, src_h)
+    # Zoom in from the max-size crop so there's actual room to reposition
+    # vertically (see TRACK_ZOOM comment above) - ffmpeg's scale filter
+    # upscales whatever we crop to the target resolution regardless of
+    # size, so this just changes framing, not output resolution.
+    crop_w = max(2, int(crop_w * TRACK_ZOOM))
+    crop_h = max(2, int(crop_h * TRACK_ZOOM))
+    crop_w -= crop_w % 2
+    crop_h -= crop_h % 2
 
     # Pass 2: crop each frame following the smoothed path, piping raw
     # frames into ffmpeg for encoding (keeps quality/GPU-encode consistent
@@ -338,7 +356,7 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
             break
         cx, cy = path[frame_idx] if frame_idx < len(path) else (src_w / 2, src_h / 2)
         x = int(min(max(cx - crop_w / 2, 0), src_w - crop_w))
-        y = int(min(max(cy - crop_h / 2, 0), src_h - crop_h))
+        y = int(min(max(cy - crop_h * HEADROOM_FRACTION, 0), src_h - crop_h))
         cropped = frame[y:y + crop_h, x:x + crop_w]
         proc.stdin.write(cropped.tobytes())
         frame_idx += 1
