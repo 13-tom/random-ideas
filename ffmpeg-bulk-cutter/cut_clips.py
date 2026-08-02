@@ -54,8 +54,15 @@ def read_clips(csv_path: Path):
                 continue
             if len(row) < 2:
                 raise ValueError(f"{csv_path}:{line_num}: expected 'start,end[,label]', got {row}")
-            start = parse_timestamp(row[0])
-            end = parse_timestamp(row[1])
+            try:
+                start = parse_timestamp(row[0])
+                end = parse_timestamp(row[1])
+            except ValueError:
+                if line_num == 1:
+                    # Tolerate an optional header row (e.g. "start,end,label")
+                    print(f"  (skipping header row: {row})")
+                    continue
+                raise ValueError(f"{csv_path}:{line_num}: expected timestamps in columns 1-2, got {row}")
             if end <= start:
                 raise ValueError(f"{csv_path}:{line_num}: end ({row[1]}) must be after start ({row[0]})")
             label = row[2] if len(row) > 2 else None
