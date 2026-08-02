@@ -156,6 +156,28 @@ confirmed frame-to-frame movement dropped to exactly 0.000px, while a
 separate test with genuine 270px movement confirmed the tracking still
 follows real motion rather than being oversuppressed.
 
+**`--zoom-on-gesture`** (dynamic mode only): the tight face-focused crop
+can clip hand gestures out of frame when someone talks with their hands.
+This detects hands (MediaPipe, a second model) on the same sampled frames
+already used for face tracking, and eases the crop out to a wider (but
+still modest - not all the way to an unzoomed full frame) view while a
+hand is visible, then eases back to the normal tight crop once the
+gesture ends:
+```
+python reframe.py clips -o reframed --aspect vertical --track-faces --zoom-on-gesture
+```
+The zoom transition is smoothed the same way position is (interpolate +
+multi-sample window), so it eases rather than jump-cuts. Verified the
+mechanics end to end with a real render: simulated a hand appearing for a
+3-second window mid-clip and confirmed the output visibly zooms out
+during that window and back in afterward, with no corruption or crash in
+the variable-size-crop-then-resize pipeline this required. One honest
+gap: I couldn't get a real photo of a hand through this sandbox's network
+to verify actual hand-detection *accuracy* (only the zoom mechanics, via
+a simulated detection signal) - worth keeping an eye on with your own
+footage, and let me know if real gestures aren't being picked up
+reliably.
+
 **Zooms in and frames with headroom, not just a raw aspect-ratio slice.**
 A crop that only just fits the target aspect ratio around the full source
 frame often has nowhere to vertically reposition at all (e.g. a 16:9

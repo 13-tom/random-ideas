@@ -22,6 +22,8 @@ from reframe import ASPECT_RATIOS
 
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
 FACE_MODEL_CACHE = Path.home() / ".cache" / "ffmpeg-bulk-cutter" / "face_landmarker.task"
+HAND_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
+HAND_MODEL_CACHE = Path.home() / ".cache" / "ffmpeg-bulk-cutter" / "hand_landmarker.task"
 
 SAMPLE_INTERVAL_SEC = 0.4
 # Must span multiple sample intervals to actually smooth anything - a
@@ -46,6 +48,13 @@ MAX_FACES = 5
 # and more room below for chest/shoulders, instead of dead-center.
 TRACK_ZOOM = 0.72
 HEADROOM_FRACTION = 0.38
+# --zoom-on-gesture: when a hand is detected (someone gesturing), ease out
+# to this wider crop instead of staying tight on the face, so hands don't
+# get clipped out of frame - then ease back to TRACK_ZOOM once the hand is
+# gone. Deliberately modest (not all the way to 1.0/no-zoom) per the
+# "not too much zoom" request this was built for.
+GESTURE_ZOOM = 0.88
+ZOOM_SMOOTHING_SEC = 1.0
 # Mouth landmark indices in MediaPipe's 478-point face mesh: inner lip
 # top/bottom (vertical gap = how open the mouth is) and left/right corners
 # (mouth width, used to normalize the gap so it's scale-invariant).
@@ -82,6 +91,33 @@ def _load_landmarker(try_gpu: bool):
     base_options = mp_python.BaseOptions(model_asset_path=model_path)
     options = vision.FaceLandmarkerOptions(base_options=base_options, num_faces=MAX_FACES, min_face_detection_confidence=0.5)
     return vision.FaceLandmarker.create_from_options(options), mp
+
+
+def _get_hand_model_path() -> Path:
+    if not HAND_MODEL_CACHE.exists():
+        HAND_MODEL_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        print("  Downloading hand landmark model (one-time, ~7.8MB)...")
+        urlretrieve(HAND_MODEL_URL, HAND_MODEL_CACHE)
+    return HAND_MODEL_CACHE
+
+
+@lru_cache(maxsize=1)
+def _load_hand_landmarker():
+    import mediapipe as mp
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision
+
+    base_options = mp_python.BaseOptions(model_asset_path=str(_get_hand_model_path()))
+    options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=2, min_hand_detection_confidence=0.4)
+    return vision.HandLandmarker.create_from_options(options), mp
+
+
+def _hand_present_in_frame(hand_landmarker, mp, frame_bgr) -> bool:
+    import cv2
+    rgb = np.ascontiguousarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+    result = hand_landmarker.detect(mp_image)
+    return len(result.hand_landmarks) > 0
 
 
 def _face_metrics(landmarks, width: int, height: int):
@@ -331,6 +367,25 @@ def _static_position(samples):
     return cxs[n // 2], cys[n // 2]
 
 
+def _build_zoom_path(gesture_samples, total_frames: int, fps: float):
+    """gesture_samples: [(frame_idx, bool), ...] - whether a hand was
+    detected at each sample. Returns a per-frame list of zoom factors
+    eased between TRACK_ZOOM and GESTURE_ZOOM (via the same interpolate +
+    smooth approach as the position path) instead of jump-cutting the
+    crop size the instant a hand appears or disappears."""
+    if not gesture_samples:
+        return [TRACK_ZOOM] * total_frames
+    xs = [idx for idx, _ in gesture_samples]
+    targets = [GESTURE_ZOOM if active else TRACK_ZOOM for _, active in gesture_samples]
+    frame_indices = np.arange(total_frames)
+    interp = np.interp(frame_indices, xs, targets)
+    window = max(1, round(fps * ZOOM_SMOOTHING_SEC))
+    kernel = np.ones(window) / window
+    pad = window // 2
+    smooth = np.convolve(np.pad(interp, pad, mode="edge"), kernel, mode="valid")[:total_frames]
+    return smooth
+
+
 def _fixed_crop_video(input_path: Path, output_path: Path, x: int, y: int, crop_w: int, crop_h: int,
                        target_res: str, use_gpu: bool):
     vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale={target_res}"
@@ -348,11 +403,17 @@ def _fixed_crop_video(input_path: Path, output_path: Path, x: int, y: int, crop_
 
 
 def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res: str, use_gpu: bool,
-                    static_crop_fallback, try_gpu_detect: bool = False, mode: str = "dynamic") -> bool:
+                    static_crop_fallback, try_gpu_detect: bool = False, mode: str = "dynamic",
+                    zoom_on_gesture: bool = False) -> bool:
     """mode="dynamic" (default) pans to follow the subject, smoothed to
     avoid jitter. mode="static" picks one fixed, face-informed crop
     position for the whole clip - no panning at all, so no possible
     camera shake, at the cost of not following a subject that moves a lot.
+
+    zoom_on_gesture (dynamic mode only) also detects hands: when someone
+    gestures, it eases out from TRACK_ZOOM to the wider GESTURE_ZOOM so the
+    gesture doesn't get clipped by the tight face crop, then eases back in
+    once the hand is gone.
 
     Returns True if smart tracking was used, False if it fell back to a
     static center crop via static_crop_fallback(input_path, output_path,
@@ -363,6 +424,9 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         sys.exit("opencv-python-headless / mediapipe not installed. Run: pip install -r requirements.txt")
 
     landmarker, mp = _load_landmarker(try_gpu_detect)
+    hand_landmarker = None
+    if zoom_on_gesture and mode == "dynamic":
+        hand_landmarker, _ = _load_hand_landmarker()
 
     cap = cv2.VideoCapture(str(input_path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
@@ -370,8 +434,10 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
     src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     sample_interval_frames = max(1, round(fps * SAMPLE_INTERVAL_SEC))
 
-    # Pass 1: sample all faces + mouth movement across the clip.
+    # Pass 1: sample all faces + mouth movement (+ hands, if requested)
+    # across the clip.
     raw_samples = []
+    gesture_samples = []
     frame_idx = 0
     while True:
         ok, frame = cap.read()
@@ -379,21 +445,28 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
             break
         if frame_idx % sample_interval_frames == 0:
             raw_samples.append((frame_idx, _detect_faces_in_frame(landmarker, mp, frame)))
+            if hand_landmarker is not None:
+                gesture_samples.append((frame_idx, _hand_present_in_frame(hand_landmarker, mp, frame)))
         frame_idx += 1
     cap.release()
     total_frames = frame_idx
 
     speaker_samples = _select_active_speaker(raw_samples, src_w, src_h)
 
-    crop_w, crop_h = crop_dimensions(aspect, src_w, src_h)
+    max_crop_w, max_crop_h = crop_dimensions(aspect, src_w, src_h)
+
+    def _sized(zoom: float) -> tuple[int, int]:
+        w = max(2, int(max_crop_w * zoom))
+        h = max(2, int(max_crop_h * zoom))
+        return w - w % 2, h - h % 2
+
     # Zoom in from the max-size crop so there's actual room to reposition
     # vertically (see TRACK_ZOOM comment above) - ffmpeg's scale filter
     # upscales whatever we crop to the target resolution regardless of
-    # size, so this just changes framing, not output resolution.
-    crop_w = max(2, int(crop_w * TRACK_ZOOM))
-    crop_h = max(2, int(crop_h * TRACK_ZOOM))
-    crop_w -= crop_w % 2
-    crop_h -= crop_h % 2
+    # size, so this just changes framing, not output resolution. This is
+    # also the fixed pipe/output size the encoder gets fed, regardless of
+    # zoom_on_gesture - variable-size crops get resized to match it.
+    pipe_w, pipe_h = _sized(TRACK_ZOOM)
 
     if mode == "static":
         position = _static_position(speaker_samples)
@@ -402,9 +475,9 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
             static_crop_fallback(input_path, output_path, aspect, use_gpu)
             return False
         cx, cy = position
-        x = int(min(max(cx - crop_w / 2, 0), src_w - crop_w))
-        y = int(min(max(cy - crop_h * HEADROOM_FRACTION, 0), src_h - crop_h))
-        _fixed_crop_video(input_path, output_path, x, y, crop_w, crop_h, target_res, use_gpu)
+        x = int(min(max(cx - pipe_w / 2, 0), src_w - pipe_w))
+        y = int(min(max(cy - pipe_h * HEADROOM_FRACTION, 0), src_h - pipe_h))
+        _fixed_crop_video(input_path, output_path, x, y, pipe_w, pipe_h, target_res, use_gpu)
         return True
 
     path = _build_smoothed_path(speaker_samples, total_frames, fps)
@@ -413,12 +486,15 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         static_crop_fallback(input_path, output_path, aspect, use_gpu)
         return False
 
-    # Pass 2: crop each frame following the smoothed path, piping raw
-    # frames into ffmpeg for encoding (keeps quality/GPU-encode consistent
-    # with the rest of the pipeline instead of using OpenCV's own encoder).
+    zoom_path = _build_zoom_path(gesture_samples, total_frames, fps) if hand_landmarker is not None else None
+
+    # Pass 2: crop each frame following the smoothed path (and zoom, if
+    # tracking gestures), piping raw frames into ffmpeg for encoding
+    # (keeps quality/GPU-encode consistent with the rest of the pipeline
+    # instead of using OpenCV's own encoder).
     ffmpeg_cmd = [
         "ffmpeg", "-y",
-        "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{crop_w}x{crop_h}", "-r", str(fps), "-i", "pipe:0",
+        "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{pipe_w}x{pipe_h}", "-r", str(fps), "-i", "pipe:0",
         "-i", str(input_path),
         "-map", "0:v", "-map", "1:a?",
         "-vf", f"scale={target_res}",
@@ -434,9 +510,17 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         if not ok:
             break
         cx, cy = path[frame_idx] if frame_idx < len(path) else (src_w / 2, src_h / 2)
+
+        if zoom_path is not None:
+            crop_w, crop_h = _sized(zoom_path[frame_idx] if frame_idx < len(zoom_path) else TRACK_ZOOM)
+        else:
+            crop_w, crop_h = pipe_w, pipe_h
+
         x = int(min(max(cx - crop_w / 2, 0), src_w - crop_w))
         y = int(min(max(cy - crop_h * HEADROOM_FRACTION, 0), src_h - crop_h))
         cropped = frame[y:y + crop_h, x:x + crop_w]
+        if (crop_w, crop_h) != (pipe_w, pipe_h):
+            cropped = cv2.resize(cropped, (pipe_w, pipe_h), interpolation=cv2.INTER_LINEAR)
         proc.stdin.write(cropped.tobytes())
         frame_idx += 1
     cap.release()

@@ -109,6 +109,7 @@ def main():
     parser.add_argument("--aspect", choices=list(ASPECT_RATIOS), required=True, help="vertical = 9:16 (Reels/Stories/Shorts), square = 1:1 (feed/carousel), portrait = 4:5 (IG feed), landscape = 16:9 (YouTube)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see module docstring)")
     parser.add_argument("--track-mode", choices=["dynamic", "static"], default="dynamic", help="dynamic = pan to follow the subject (default). static = one fixed, face-informed crop position for the whole clip - no panning, so no possible camera shake. Only relevant with --track-faces.")
+    parser.add_argument("--zoom-on-gesture", action="store_true", help="Ease out to a wider crop when a hand is detected (gesturing) so it doesn't get clipped by the tight face crop, then ease back in once the hand is gone. Only relevant with --track-faces --track-mode dynamic.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
@@ -135,7 +136,7 @@ def main():
         for i, video_path in enumerate(videos, start=1):
             output_path = args.output_dir / video_path.name
             print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect} (tracking faces)  =>  {output_path}")
-            face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect, args.track_mode)
+            face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect, args.track_mode, args.zoom_on_gesture)
     else:
         use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
         for i, video_path in enumerate(videos, start=1):

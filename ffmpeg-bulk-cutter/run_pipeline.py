@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--aspect", choices=["original", *reframe.ASPECT_RATIOS], default="original", help="vertical = 9:16 Reels/Stories/Shorts, square = 1:1 feed/carousel, portrait = 4:5 IG feed, landscape = 16:9 YouTube, original = skip cropping (default)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see reframe.py --help). Ignored if --aspect original.")
     parser.add_argument("--track-mode", choices=["dynamic", "static"], default="dynamic", help="dynamic = pan to follow the subject (default). static = one fixed, face-informed crop position for the whole clip - no panning, no possible camera shake. Only relevant with --track-faces.")
+    parser.add_argument("--zoom-on-gesture", action="store_true", help="Ease out to a wider crop when a hand is detected (gesturing) so it doesn't get clipped, then ease back in. Only relevant with --track-faces --track-mode dynamic.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size; ignored when --language hinglish is used (default: small)")
@@ -117,7 +118,7 @@ def main():
             suffix = " (tracking faces)" if args.track_faces else ""
             print(f"[{i}/{len(clip_paths)}] {clip_path.name} -> {args.aspect}{suffix}  =>  {output_path}")
             if args.track_faces:
-                face_tracking.track_and_crop(clip_path, output_path, args.aspect, target_res, use_gpu_track, reframe.reframe_video, args.gpu_detect, args.track_mode)
+                face_tracking.track_and_crop(clip_path, output_path, args.aspect, target_res, use_gpu_track, reframe.reframe_video, args.gpu_detect, args.track_mode, args.zoom_on_gesture)
             else:
                 reframe.reframe_video(clip_path, output_path, args.aspect, use_gpu_encode)
             reframed_paths.append(output_path)
