@@ -24,7 +24,16 @@ FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarke
 FACE_MODEL_CACHE = Path.home() / ".cache" / "ffmpeg-bulk-cutter" / "face_landmarker.task"
 
 SAMPLE_INTERVAL_SEC = 0.4
-SMOOTHING_WINDOW = 7
+# Must span multiple sample intervals to actually smooth anything - a
+# window narrower than SAMPLE_INTERVAL_SEC (the original bug: 7 frames at
+# 25fps is ~0.28s, less than one 0.4s sample gap) lets per-sample detection
+# noise pass straight through as visible camera shake.
+SMOOTHING_WINDOW_SEC = 1.2
+# Movement smaller than this fraction of the frame diagonal between
+# samples is treated as detection noise (a static face's landmarks still
+# wobble a few pixels frame to frame) and held at the previous position
+# instead of being treated as real motion to pan toward.
+DEADZONE_FRAC = 0.025
 MOUTH_HISTORY_LEN = 6
 MAX_FACES = 5
 # A crop that just fits the target aspect ratio around the full source
@@ -261,14 +270,36 @@ def _select_active_speaker(samples, frame_w: int, frame_h: int):
     return output
 
 
-def _build_smoothed_path(samples, total_frames):
+def _apply_deadzone(known, frame_w: int, frame_h: int):
+    """known: [(frame_idx, (cx,cy)), ...]. Snaps movement smaller than
+    DEADZONE_FRAC of the frame diagonal to the previously held position,
+    so a mostly-still subject produces a genuinely constant path instead
+    of drifting by a few noisy pixels every sample."""
+    threshold = DEADZONE_FRAC * math.hypot(frame_w, frame_h)
+    result = []
+    held = None
+    for idx, (cx, cy) in known:
+        if held is not None and math.hypot(cx - held[0], cy - held[1]) < threshold:
+            result.append((idx, held))
+        else:
+            held = (cx, cy)
+            result.append((idx, held))
+    return result
+
+
+def _build_smoothed_path(samples, total_frames, fps: float):
     """samples: [(frame_idx, (cx,cy) or None), ...]. Returns a per-frame
-    list of (cx,cy), interpolating across gaps and smoothing with a moving
-    average to avoid jittery panning; or None if no faces were found at
-    all in the clip."""
+    list of (cx,cy), interpolating across gaps, snapping sub-threshold
+    jitter to a held position, and smoothing over a multi-sample window to
+    avoid jittery panning; or None if no faces were found at all."""
     known = [(idx, c) for idx, c in samples if c is not None]
     if not known:
         return None
+
+    frame_w_est = max(c[0] for _, c in known) + 1
+    frame_h_est = max(c[1] for _, c in known) + 1
+    known = _apply_deadzone(known, frame_w_est, frame_h_est)
+
     xs = [k[0] for k in known]
     cxs = [k[1][0] for k in known]
     cys = [k[1][1] for k in known]
@@ -279,16 +310,51 @@ def _build_smoothed_path(samples, total_frames):
     interp_cx = np.interp(frame_indices, xs, cxs)
     interp_cy = np.interp(frame_indices, xs, cys)
 
-    kernel = np.ones(SMOOTHING_WINDOW) / SMOOTHING_WINDOW
-    pad = SMOOTHING_WINDOW // 2
+    window = max(1, round(fps * SMOOTHING_WINDOW_SEC))
+    kernel = np.ones(window) / window
+    pad = window // 2
     smooth_cx = np.convolve(np.pad(interp_cx, pad, mode="edge"), kernel, mode="valid")[:total_frames]
     smooth_cy = np.convolve(np.pad(interp_cy, pad, mode="edge"), kernel, mode="valid")[:total_frames]
     return list(zip(smooth_cx, smooth_cy))
 
 
+def _static_position(samples):
+    """Median (x, y) across all known samples - a single robust crop
+    center for the whole clip, resistant to outlier positions (e.g. a
+    brief look-away) unlike a plain mean. None if nothing was ever found."""
+    known = [c for _, c in samples if c is not None]
+    if not known:
+        return None
+    cxs = sorted(c[0] for c in known)
+    cys = sorted(c[1] for c in known)
+    n = len(known)
+    return cxs[n // 2], cys[n // 2]
+
+
+def _fixed_crop_video(input_path: Path, output_path: Path, x: int, y: int, crop_w: int, crop_h: int,
+                       target_res: str, use_gpu: bool):
+    vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale={target_res}"
+    base_cmd = ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf]
+
+    if use_gpu:
+        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
+        result = subprocess.run(gpu_cmd, capture_output=True)
+        if result.returncode == 0:
+            return
+        print("  GPU encode failed at runtime, falling back to CPU (libx264)")
+
+    cpu_cmd = base_cmd + ["-c:v", "libx264", "-c:a", "copy", str(output_path)]
+    subprocess.run(cpu_cmd, check=True)
+
+
 def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res: str, use_gpu: bool,
-                    static_crop_fallback, try_gpu_detect: bool = False) -> bool:
-    """Returns True if smart tracking was used, False if it fell back to a
+                    static_crop_fallback, try_gpu_detect: bool = False, mode: str = "dynamic") -> bool:
+    """mode="dynamic" (default) pans to follow the subject, smoothed to
+    avoid jitter. mode="static" picks one fixed, face-informed crop
+    position for the whole clip - no panning at all, so no possible
+    camera shake, at the cost of not following a subject that moves a lot.
+
+    Returns True if smart tracking was used, False if it fell back to a
     static center crop via static_crop_fallback(input_path, output_path,
     aspect, use_gpu)."""
     try:
@@ -318,11 +384,6 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
     total_frames = frame_idx
 
     speaker_samples = _select_active_speaker(raw_samples, src_w, src_h)
-    path = _build_smoothed_path(speaker_samples, total_frames)
-    if path is None:
-        print("  No faces detected anywhere in this clip, falling back to center crop")
-        static_crop_fallback(input_path, output_path, aspect, use_gpu)
-        return False
 
     crop_w, crop_h = crop_dimensions(aspect, src_w, src_h)
     # Zoom in from the max-size crop so there's actual room to reposition
@@ -333,6 +394,24 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
     crop_h = max(2, int(crop_h * TRACK_ZOOM))
     crop_w -= crop_w % 2
     crop_h -= crop_h % 2
+
+    if mode == "static":
+        position = _static_position(speaker_samples)
+        if position is None:
+            print("  No faces detected anywhere in this clip, falling back to center crop")
+            static_crop_fallback(input_path, output_path, aspect, use_gpu)
+            return False
+        cx, cy = position
+        x = int(min(max(cx - crop_w / 2, 0), src_w - crop_w))
+        y = int(min(max(cy - crop_h * HEADROOM_FRACTION, 0), src_h - crop_h))
+        _fixed_crop_video(input_path, output_path, x, y, crop_w, crop_h, target_res, use_gpu)
+        return True
+
+    path = _build_smoothed_path(speaker_samples, total_frames, fps)
+    if path is None:
+        print("  No faces detected anywhere in this clip, falling back to center crop")
+        static_crop_fallback(input_path, output_path, aspect, use_gpu)
+        return False
 
     # Pass 2: crop each frame following the smoothed path, piping raw
     # frames into ffmpeg for encoding (keeps quality/GPU-encode consistent

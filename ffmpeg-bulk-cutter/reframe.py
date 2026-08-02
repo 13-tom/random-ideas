@@ -19,11 +19,25 @@ follow a moving subject.
 --track-faces switches to smart subject-tracking: it detects faces across
 the clip (MediaPipe), and when more than one person is in frame, follows
 whichever one is actively speaking (based on mouth movement over time, not
-just face size), smoothed to avoid jittery panning or flickering between
-speakers. Falls back to a static center crop automatically if no faces are
-found. Decodes the video twice (once to sample faces, once to crop), so
-it's noticeably slower than the static crop - budget more time for longer
-clips. Requires opencv-python-headless + mediapipe (see requirements.txt).
+just face size). Falls back to a static center crop automatically if no
+faces are found. Decodes the video twice (once to sample faces, once to
+crop), so it's noticeably slower than the static crop - budget more time
+for longer clips. Requires opencv-python-headless + mediapipe (see
+requirements.txt).
+
+--track-mode controls how it uses that tracking:
+    dynamic (default) - pans to follow the subject, smoothed over a
+                         multi-sample window with a deadzone for small
+                         detection noise so a mostly-still subject doesn't
+                         visibly shake.
+    static             - detects faces the same way, but picks one fixed
+                         crop position (median face location) for the
+                         whole clip - literally zero panning, so zero
+                         possible camera shake. Better than a plain
+                         center crop (it's centered on wherever the
+                         subject actually is, not the frame's geometric
+                         center) but won't follow a subject that moves
+                         around a lot.
 
 Face detection runs on CPU by default - the model is tiny (a few ms/frame)
 so a GPU wouldn't meaningfully speed it up, and MediaPipe's GPU delegate
@@ -94,6 +108,7 @@ def main():
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("reframed"), help="Where to write reframed videos (default: ./reframed)")
     parser.add_argument("--aspect", choices=list(ASPECT_RATIOS), required=True, help="vertical = 9:16 (Reels/Stories/Shorts), square = 1:1 (feed/carousel), portrait = 4:5 (IG feed), landscape = 16:9 (YouTube)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see module docstring)")
+    parser.add_argument("--track-mode", choices=["dynamic", "static"], default="dynamic", help="dynamic = pan to follow the subject (default). static = one fixed, face-informed crop position for the whole clip - no panning, so no possible camera shake. Only relevant with --track-faces.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     args = parser.parse_args()
@@ -120,7 +135,7 @@ def main():
         for i, video_path in enumerate(videos, start=1):
             output_path = args.output_dir / video_path.name
             print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect} (tracking faces)  =>  {output_path}")
-            face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect)
+            face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect, args.track_mode)
     else:
         use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
         for i, video_path in enumerate(videos, start=1):

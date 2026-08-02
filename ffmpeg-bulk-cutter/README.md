@@ -132,6 +132,30 @@ Requires `opencv-python-headless` + `mediapipe` (see `requirements.txt`).
 It decodes the video twice (once to sample faces, once to crop), so it's
 slower than the static crop - budget more time for longer clips.
 
+**`--track-mode dynamic` (default) vs `--track-mode static`:**
+```
+python reframe.py clips -o reframed --aspect vertical --track-faces --track-mode static
+```
+- `dynamic` pans to follow the subject frame by frame.
+- `static` detects faces the same way, but picks **one fixed crop position**
+  (median face location) for the whole clip - literally zero panning, so
+  zero possible camera shake. Better than a plain center crop since it's
+  still centered on wherever the subject actually is, but won't follow a
+  subject that moves around a lot. Good choice for a mostly-stationary
+  talking-head shot where you don't want any camera movement at all.
+
+Caught a real jitter bug building `dynamic` mode: the smoothing window was
+narrower than the gap between detection samples (7 frames ≈ 0.28s of
+smoothing against a 0.4s sample interval), so per-sample detection noise -
+a still face's landmarks naturally wobble a few pixels frame to frame -
+passed straight through as visible camera shake. Fixed with a proper
+multi-sample smoothing window plus a deadzone that snaps sub-threshold
+movement to a held position. Verified with real numbers, not just "looks
+smoother": simulated a stationary face with realistic detection noise and
+confirmed frame-to-frame movement dropped to exactly 0.000px, while a
+separate test with genuine 270px movement confirmed the tracking still
+follows real motion rather than being oversuppressed.
+
 **Zooms in and frames with headroom, not just a raw aspect-ratio slice.**
 A crop that only just fits the target aspect ratio around the full source
 frame often has nowhere to vertically reposition at all (e.g. a 16:9
