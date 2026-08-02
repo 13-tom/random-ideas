@@ -41,7 +41,13 @@ def format_timestamp(seconds: float) -> str:
 
 def read_clips(csv_path: Path):
     clips = []
-    with csv_path.open(newline="") as f:
+    # utf-8-sig (not plain utf-8): reads plain UTF-8 fine, and also strips
+    # a leading BOM if present - Notepad on Windows often saves "UTF-8"
+    # files with one, which would otherwise land as a stray character
+    # glued onto the first field. Without an explicit encoding here at
+    # all, open() defaults to the OS codepage (cp1252 on Windows), which
+    # throws UnicodeDecodeError on anything outside plain ASCII.
+    with csv_path.open(newline="", encoding="utf-8-sig") as f:
         for line_num, row in enumerate(csv.reader(f), start=1):
             row = [cell.strip() for cell in row if cell.strip() != ""]
             if not row:
