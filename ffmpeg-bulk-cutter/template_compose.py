@@ -60,16 +60,13 @@ VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
 # --- Template geometry (all in pixels on a fixed 1080x1920 canvas) ---
 CANVAS_W, CANVAS_H = 1080, 1920
-TOP_ZONE_H = 320                                    # headline + brand zone
-SIDE_MARGIN = 60                                    # video's negative space, left/right
+TOP_ZONE_H = 320                                    # headline + brand zone (only reserved if used)
+SIDE_MARGIN = 60                                    # video's negative space, left/right (and top, when there's no heading)
 VIDEO_GAP_TOP = 40                                  # gap between top zone and video
 VIDEO_BOX_W = CANVAS_W - 2 * SIDE_MARGIN            # 960
 VIDEO_BOX_H = round(VIDEO_BOX_W * 9 / 16)           # 540 - sized for a 16:9 source
-VIDEO_Y = TOP_ZONE_H + VIDEO_GAP_TOP                # 360
 CAPTION_GAP = 50                                    # gap between video and reading zone
-SUBTITLE_ZONE_TOP = VIDEO_Y + VIDEO_BOX_H + CAPTION_GAP  # 950
 CAPTION_TOP_PAD = 30                                # padding from the reading zone's top edge to the caption text
-CAPTION_MARGIN_V = SUBTITLE_ZONE_TOP + CAPTION_TOP_PAD  # measured from the CANVAS top, since captions use top-anchored alignment
 
 BRAND_MARGIN_V = 30
 HEADLINE_MARGIN_V = 110
@@ -79,14 +76,27 @@ GRID_SPACING = 54
 GRID_OPACITY = 0.05
 
 
-def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool):
+def video_y_for(has_heading: bool) -> int:
+    """Top zone only takes up space if it's actually used (--headline/--brand);
+    otherwise the video moves up to just past the top margin."""
+    return (TOP_ZONE_H + VIDEO_GAP_TOP) if has_heading else SIDE_MARGIN
+
+
+def caption_margin_v_for(video_y: int) -> int:
+    """Distance from the canvas top to the caption text (captions use
+    top-anchored alignment), derived from wherever the video actually ends."""
+    subtitle_zone_top = video_y + VIDEO_BOX_H + CAPTION_GAP
+    return subtitle_zone_top + CAPTION_TOP_PAD
+
+
+def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool, video_y: int):
     """Letterbox the source video inside the Main Content Zone over a
     faintly-textured dark background, preserving the full original frame
     (no cropping) with visible negative-space margins."""
     filter_complex = (
         f"[1:v]drawgrid=width={GRID_SPACING}:height={GRID_SPACING}:thickness=1:color=white@{GRID_OPACITY}[bg];"
         f"[0:v]scale=w={VIDEO_BOX_W}:h={VIDEO_BOX_H}:force_original_aspect_ratio=decrease[vid];"
-        f"[bg][vid]overlay=x=(W-w)/2:y={VIDEO_Y}+({VIDEO_BOX_H}-h)/2[outv]"
+        f"[bg][vid]overlay=x=(W-w)/2:y={video_y}+({VIDEO_BOX_H}-h)/2[outv]"
     )
     base_cmd = [
         "ffmpeg", "-y",
@@ -186,7 +196,8 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, arg
     print(f"[{i}/{total}] Composing {video_path.name}...")
     duration = get_media_duration(video_path)
     framed_path = output_dir / f"{video_path.stem}_framed.mp4"
-    _compose_frame(video_path, framed_path, duration, use_gpu_encode)
+    has_heading = bool(args.headline or args.brand)
+    _compose_frame(video_path, framed_path, duration, use_gpu_encode, video_y_for(has_heading))
 
     caption_words = None
     if not args.no_captions:
@@ -251,6 +262,9 @@ def main():
     if not args.input.exists():
         sys.exit(f"Input not found: {args.input}")
 
+    has_heading = bool(args.headline or args.brand)
+    caption_margin_v = caption_margin_v_for(video_y_for(has_heading))
+
     try:
         headline_style = CaptionStyle(
             font=args.headline_font, font_size=args.headline_font_size,
@@ -267,7 +281,7 @@ def main():
             text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
             outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
             bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
-            box=args.box, position="top", margin_v=CAPTION_MARGIN_V,
+            box=args.box, position="top", margin_v=caption_margin_v,
         )
     except ValueError as e:
         sys.exit(str(e))

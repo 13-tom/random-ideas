@@ -318,6 +318,11 @@ below" style you see on accounts like aieverymorning:
 The background isn't flat black - it's a very faint grid texture (ffmpeg's
 `drawgrid`, ~5% opacity) so it doesn't look like dead space on camera.
 
+The top zone only exists if you actually use it - leave off both
+`--headline` and `--brand` and the clip moves up to just past the top
+margin instead of leaving that space blank, and the caption zone follows it
+up too.
+
 ```
 python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
 python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
