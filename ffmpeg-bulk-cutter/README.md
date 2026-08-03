@@ -319,20 +319,20 @@ The background isn't flat black - it's a very faint grid texture (ffmpeg's
 `drawgrid`, ~5% opacity) so it doesn't look like dead space on camera.
 
 The top zone only exists if you actually use it - leave off both
-`--headline` and `--brand` and the clip moves up to just past the top
-margin instead of leaving that space blank, and the caption zone follows it
-up too.
+`--headline` and `--brand` and the clip is centered vertically in the
+canvas instead of sitting in a fixed spot below a blank zone, and the
+caption zone follows it down.
 
 ```
 python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
 python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
 python template_compose.py clips/ -o template_output --headline "..." --language hinglish
-python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.2
+python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.0   # disable the default zoom, show the full frame
 ```
 
-`--zoom` (default `1.0`) zooms in on the clip before it goes into the
-content zone - `1.2` = 20% zoomed in. Past `1.0` it stops fitting the whole
-frame inside the box and instead crops in (centered) and scales to fill the
+`--zoom` (default `1.2`, i.e. 20% zoomed in) zooms in on the clip before it
+goes into the content zone. Above `1.0` it stops fitting the whole frame
+inside the box and instead crops in (centered) and scales to fill the
 box completely, so the subject reads bigger at the cost of cropping the
 edges of the original frame - the opposite trade-off from the default
 "show everything, no cropping" behavior.

@@ -57,14 +57,21 @@ def load_hinglish_pipeline(use_gpu: bool):
     from transformers import pipeline
     import torch
 
+    # chunk_length_s/stride_length_s: Whisper's encoder only handles ~30s of
+    # audio per pass. Without these, transformers doesn't chunk longer clips
+    # itself, and on anything past ~30s the pipeline can silently come back
+    # with an empty transcript instead of erroring - explicit chunking (with
+    # a little overlap via stride) makes clips of any length transcribe
+    # reliably, at the cost of chunk boundaries needing the overlap to stitch
+    # words back together (which the pipeline already handles internally).
     if use_gpu:
         try:
-            pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=0, torch_dtype=torch.float16)
+            pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=0, torch_dtype=torch.float16, chunk_length_s=30, stride_length_s=5)
             print(f"Loaded {HINGLISH_MODEL_ID} on GPU (CUDA, float16)")
             return pipe
         except Exception as e:
             print(f"GPU load failed ({e}); falling back to CPU")
-    pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=-1, torch_dtype=torch.float32)
+    pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=-1, torch_dtype=torch.float32, chunk_length_s=30, stride_length_s=5)
     print(f"Loaded {HINGLISH_MODEL_ID} on CPU")
     return pipe
 

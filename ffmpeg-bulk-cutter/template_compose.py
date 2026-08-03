@@ -79,8 +79,11 @@ GRID_OPACITY = 0.05
 
 def video_y_for(has_heading: bool) -> int:
     """Top zone only takes up space if it's actually used (--headline/--brand);
-    otherwise the video moves up to just past the top margin."""
-    return (TOP_ZONE_H + VIDEO_GAP_TOP) if has_heading else SIDE_MARGIN
+    otherwise the clip is centered vertically in the canvas instead of
+    hugging the top margin."""
+    if has_heading:
+        return TOP_ZONE_H + VIDEO_GAP_TOP
+    return (CANVAS_H - VIDEO_BOX_H) // 2
 
 
 def caption_margin_v_for(video_y: int) -> int:
@@ -225,6 +228,11 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, arg
             from add_subtitles import get_words_faster_whisper
             language = None if args.language in ("auto", "hinglish") else args.language
             caption_words, _ = get_words_faster_whisper(model, framed_path, language)
+        print(f"    Transcribed {len(caption_words)} word(s)")
+        if not caption_words:
+            print("    WARNING: no words transcribed - the output will have no captions. "
+                  "Check the clip actually has audible speech (not just music/silence), "
+                  "or try --language auto or --language en to compare.")
 
     ass_path = output_dir / f"{video_path.stem}.ass"
     write_template_ass(
@@ -255,7 +263,7 @@ def main():
     parser.add_argument("--headline-font-size", type=int, default=58, help="Headline font size (default: 58)")
     parser.add_argument("--brand-color", default="#FFD400", help="Brand pill background color (default: #FFD400)")
     parser.add_argument("--brand-font-size", type=int, default=32, help="Brand pill font size (default: 32)")
-    parser.add_argument("--zoom", type=float, default=1.0, help="Zoom in on the clip before fitting it into the content zone, e.g. 1.2 = 20%% zoom-in. Crops the edges to fill the box completely (centered) instead of leaving letterbox margins around the clip itself. Default: 1.0 = no extra zoom, shows the full frame with negative-space margins.")
+    parser.add_argument("--zoom", type=float, default=1.2, help="Zoom in on the clip before fitting it into the content zone, e.g. 1.2 = 20%% zoom-in (this is now the default). Crops the edges to fill the box completely (centered) instead of leaving letterbox margins around the clip itself. Pass --zoom 1.0 to disable and show the full frame with negative-space margins instead.")
     parser.add_argument("--no-captions", action="store_true", help="Skip transcription; compose the frame + headline only")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size, ignored for --language hinglish (default: small)")
