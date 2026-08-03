@@ -71,9 +71,16 @@ BG_COLOR = "0x0d0d0d"
 GRID_SPACING = 54
 GRID_OPACITY = 0.05
 
-# Captions are overlaid ON the video, this many pixels above the video
-# box's bottom edge.
-CAPTION_BOTTOM_PAD = 60
+# Caption position: distance from the CANVAS BOTTOM edge up to the caption
+# text (this is how ffmpeg/ASS positions bottom-anchored text: bigger number
+# = higher up the screen, smaller number = closer to the bottom edge).
+# The default below computes to a position just above the video box's
+# bottom edge, but you can set CAPTION_MARGIN_V to any plain number
+# yourself to put the caption wherever you want on the canvas - lower on
+# the video, higher up overlapping it more, or even down in the background
+# margin below the video box.
+CAPTION_BOTTOM_PAD = 60                                # (used only by the default calc below)
+CAPTION_MARGIN_V = (CANVAS_H - (VIDEO_Y + VIDEO_BOX_H)) + CAPTION_BOTTOM_PAD
 
 # ============================================================================
 
@@ -208,16 +215,13 @@ def main():
     if not args.input.exists():
         sys.exit(f"Input not found: {args.input}")
 
-    video_bottom = VIDEO_Y + VIDEO_BOX_H
-    caption_margin_v = (CANVAS_H - video_bottom) + CAPTION_BOTTOM_PAD
-
     try:
         caption_style = CaptionStyle(
             font=args.font, font_size=args.font_size,
             text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
             outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
             bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
-            box=args.box, position="bottom", margin_v=caption_margin_v,
+            box=args.box, position="bottom", margin_v=CAPTION_MARGIN_V,
         )
     except ValueError as e:
         sys.exit(str(e))

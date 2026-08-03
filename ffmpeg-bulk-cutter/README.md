@@ -326,13 +326,17 @@ python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3
 ```
 
 Every layout number - the video box's size, its vertical position, the
-background, how close the captions sit to the video's bottom edge - is a
-plain, heavily-commented constant at the top of `template_compose.py`
-(`VIDEO_BOX_W`, `VIDEO_BOX_H`, `VIDEO_Y`, etc.). Edit those directly to
-reposition or resize things; nothing else in the file needs to change.
-`VIDEO_Y` in particular is the video box's top-edge y-coordinate - its
-default value is dead center, but you can set it to any number to move the
-video up or down.
+background, where the captions sit - is a plain, heavily-commented constant
+at the top of `template_compose.py`. Edit those directly to reposition or
+resize things; nothing else in the file needs to change.
+
+- `VIDEO_Y` - the video box's top-edge y-coordinate. Default is dead
+  center; set it to any number to move the video up or down.
+- `CAPTION_MARGIN_V` - distance from the canvas's bottom edge up to the
+  caption text (bigger number = higher up the screen). Defaults to just
+  above the video box's bottom edge, but it's an independent number - set
+  it to anything to put the caption wherever you want, regardless of where
+  the video itself sits.
 
 `--zoom` (default `1.0`) is an *extra* zoom-in on top of the crop that
 already happens to fill the box's shape - e.g. `--zoom 1.3` crops in 30%
