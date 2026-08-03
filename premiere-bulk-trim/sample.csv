@@ -1,0 +1,4 @@
+sourcePath,inPoint,outPoint,outputName
+C:\footage\interview_01.mp4,00:01:12:00,00:02:45:00,interview_01_clip
+C:\footage\interview_01.mp4,00:05:00:00,00:05:30:15,interview_01_clip2
+C:\footage\bcam_02.mov,42.5,97.25,bcam_02_highlight
