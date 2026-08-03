@@ -137,6 +137,39 @@ def _extract_wav(video_path: Path):
     return wav_path
 
 
+def _detect_silences(video_path: Path, noise_db: str = "-35dB", min_duration: float = 0.6) -> list[tuple[float, float]]:
+    """Analysis-only pass (ffmpeg's silencedetect filter doesn't modify the
+    audio, so timestamps stay aligned with the original clip) to find silent
+    ranges. Used to filter out Whisper's well-known hallucination habit of
+    repeating the last-heard word/phrase over and over during actual
+    silence, since the Hinglish pipeline has no VAD of its own (unlike
+    faster-whisper's vad_filter=True)."""
+    result = subprocess.run(
+        ["ffmpeg", "-nostdin", "-i", str(video_path), "-af", f"silencedetect=noise={noise_db}:d={min_duration}", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    silences = []
+    start = None
+    for line in result.stderr.splitlines():
+        if "silence_start" in line:
+            try:
+                start = float(line.split("silence_start:")[1].strip().split()[0])
+            except (IndexError, ValueError):
+                start = None
+        elif "silence_end" in line and start is not None:
+            try:
+                end = float(line.split("silence_end:")[1].strip().split("|")[0].strip())
+                silences.append((start, end))
+            except (IndexError, ValueError):
+                pass
+            start = None
+    return silences
+
+
+def _in_silence(start: float, end: float, silences: list[tuple[float, float]]) -> bool:
+    return any(start >= s and end <= e for s, e in silences)
+
+
 def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
     wav_path = _extract_wav(video_path)
     try:
@@ -149,6 +182,7 @@ def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
         wav_path.unlink(missing_ok=True)
     chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
     duration = get_media_duration(video_path)
+    silences = _detect_silences(video_path)
 
     entries = []
     for i, chunk in enumerate(chunks):
@@ -159,6 +193,8 @@ def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
             # final (or a cut-off) chunk; fall back to the next chunk's
             # start, or the clip's total duration if this is the last one.
             end = chunks[i + 1]["timestamp"][0] if i + 1 < len(chunks) else duration
+        if _in_silence(start, end, silences):
+            continue
         entries.append((start, end, chunk["text"]))
 
     count = write_srt(srt_path, entries)
@@ -199,6 +235,7 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
         wav_path.unlink(missing_ok=True)
     chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
     duration = get_media_duration(video_path)
+    silences = _detect_silences(video_path)
 
     words = []
     for i, chunk in enumerate(chunks):
@@ -206,6 +243,8 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
         start = start or 0.0
         if end is None:
             end = chunks[i + 1]["timestamp"][0] if i + 1 < len(chunks) else duration
+        if _in_silence(start, end, silences):
+            continue
         chunk_words = chunk["text"].strip().split()
         if not chunk_words:
             continue
@@ -214,7 +253,9 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
         cursor = start
         for w in chunk_words:
             portion = (len(w) / total_chars) * span
-            words.append(Word(cursor, cursor + portion, w))
+            word_start, word_end = cursor, cursor + portion
+            if not _in_silence(word_start, word_end, silences):
+                words.append(Word(word_start, word_end, w))
             cursor += portion
     return words
 
