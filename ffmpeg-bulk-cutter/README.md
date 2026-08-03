@@ -292,27 +292,30 @@ own per-word alignment. It reads fine on screen, but isn't frame-perfect
 the way the English/Hindi path (faster-whisper, which does give real
 per-word timestamps) is.
 
-## Centered Reel template (`template_compose.py`)
+## Reel template (`template_compose.py`)
 
 This is a different look from `reframe.py` above. `reframe.py --track-faces`
 crops the source to fill the *entire* 9:16 frame edge to edge.
-`template_compose.py` instead places the clip in a centered box with visible
-negative-space margins around it, over a faintly-textured dark background,
-with spoken captions burned directly onto the video near its bottom edge:
+`template_compose.py` instead matches the aieverymorning-style reference
+template (minus the heading/logo): the full, uncropped video sits in a
+fixed box, over a faintly-textured dark background, with spoken captions
+in their own separate space below it - not overlaid on the video:
 
 ```
 +--------------------------+
 |   (background, faint      |
 |    grid texture)          |
-|   +--------------------+  |
-|   |                    |  |
-|   |   video, zoomed    |  |
-|   |   in and cropped   |  |
-|   |   to fill the box  |  |
-|   |                    |  |
-|   |   [captions here]  |  |  <- overlaid on the video, near its bottom
-|   +--------------------+  |
++--------------------------+
 |                            |
+|   full original video,    |
+|   NOT cropped - letterboxed|
+|   inside the box if its    |
+|   aspect ratio needs it    |
+|                            |
++--------------------------+
+|                            |
+|      [captions here]      |  <- separate zone, below the video,
+|                            |     never overlapping it
 +--------------------------+
 ```
 
@@ -322,26 +325,29 @@ The background isn't flat black - it's a very faint grid texture (ffmpeg's
 ```
 python template_compose.py clip.mp4 -o reel.mp4
 python template_compose.py clips/ -o template_output --language hinglish
-python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3
+python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3   # optional: crop in instead of showing the full frame
 ```
 
-Every layout number - the video box's size, its vertical position, the
-background, where the captions sit - is a plain, heavily-commented constant
-at the top of `template_compose.py`. Edit those directly to reposition or
-resize things; nothing else in the file needs to change.
+Every layout number - the video box's size, its position, the gap to the
+captions - is a plain, heavily-commented constant at the top of
+`template_compose.py`. Edit those directly to reposition or resize things;
+nothing else in the file needs to change.
 
-- `VIDEO_Y` - the video box's top-edge y-coordinate. Default is dead
-  center; set it to any number to move the video up or down.
-- `CAPTION_MARGIN_V` - distance from the canvas's bottom edge up to the
-  caption text (bigger number = higher up the screen). Defaults to just
-  above the video box's bottom edge, but it's an independent number - set
-  it to anything to put the caption wherever you want, regardless of where
+- `VIDEO_BOX_W` / `VIDEO_BOX_H` / `VIDEO_Y` - the video box's size and its
+  top-edge y-coordinate (always horizontally centered). Defaults match the
+  reference template's proportions: full width, positioned in the
+  upper-middle area.
+- `CAPTION_MARGIN_TOP` - distance from the canvas's *top* edge down to the
+  caption text (captions grow downward from this point). Defaults to a
+  fixed gap below the video box, but it's an independent number - set it
+  to anything to put the caption wherever you want, regardless of where
   the video itself sits.
 
-`--zoom` (default `1.0`) is an *extra* zoom-in on top of the crop that
-already happens to fill the box's shape - e.g. `--zoom 1.3` crops in 30%
-further, so the subject reads bigger at the cost of more of the original
-frame's edges being cut off.
+`--zoom` (default `1.0`) shows the full frame with nothing cropped
+(letterboxed if the source's aspect ratio doesn't exactly match the box).
+Above `1.0` it switches to cropping in by that factor and filling the box
+edge-to-edge instead - e.g. `--zoom 1.3` crops in 30%, so the subject reads
+bigger at the cost of the original frame's edges being cut off.
 
 If one clip in a batch fails (bad audio, corrupt file, etc.) it's reported
 and skipped - the rest of the batch still runs, rather than the whole

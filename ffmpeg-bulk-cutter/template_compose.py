@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
-"""Compose a landscape clip onto a vertical (1080x1920) canvas: the clip is
-zoomed in and cropped to fill a centered box, over a faintly-textured dark
-background, with spoken captions burned directly on top of the video near
-its bottom edge.
+"""Compose a landscape clip onto a vertical (1080x1920) canvas, matching the
+aieverymorning-style Reel template minus the heading/logo: the full,
+uncropped video sits in a fixed box, over a faintly-textured dark
+background, with spoken captions in their own separate space below it -
+not overlaid on the video.
 
     +--------------------------+
     |   (background, faint      |
     |    grid texture)          |
-    |   +--------------------+  |
-    |   |                    |  |
-    |   |   video, zoomed    |  |
-    |   |   in and cropped   |  |
-    |   |   to fill the box  |  |
-    |   |                    |  |
-    |   |   [captions here]  |  |  <- overlaid on the video, near its bottom
-    |   +--------------------+  |
+    +--------------------------+
+    |                            |
+    |   full original video,    |
+    |   NOT cropped - letterboxed|
+    |   inside the box if its    |
+    |   aspect ratio needs it    |
     |                            |
     +--------------------------+
+    |                            |
+    |      [captions here]      |  <- separate zone, below the video,
+    |                            |     never overlapping it
+    +--------------------------+
 
-All the layout numbers (box size, position, margins, where the captions
-sit) are plain constants right below this docstring - edit them directly
-to change the layout, no need to read the rest of the file.
+All the layout numbers (box size, position, gap to the captions) are plain
+constants right below this docstring - edit them directly to change the
+layout, no need to read the rest of the file.
 
 Usage:
     python template_compose.py clip.mp4 -o reel.mp4
     python template_compose.py clips/ -o template_output --language hinglish
-    python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3
+    python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3   # optional: crop in instead of showing the full frame
 """
 import argparse
 import shutil
@@ -47,49 +50,53 @@ VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 CANVAS_W = 1080
 CANVAS_H = 1920
 
-# The video's box: size and position on the canvas.
-VIDEO_BOX_W = 1000                                   # box width  (<= CANVAS_W)
-VIDEO_BOX_H = 1720                                   # box height (<= CANVAS_H)
-VIDEO_Y = (CANVAS_H - VIDEO_BOX_H) // 2               # y of the box's TOP edge.
-                                                       # Current value = dead
-                                                       # center. Set this to
-                                                       # any number 0..(CANVAS_H
-                                                       # - VIDEO_BOX_H) to move
+# The video's box: size and position on the canvas. Matches the reference
+# template's proportions - full width (no side margins), positioned in the
+# upper-middle area (~36%-70% down the canvas).
+VIDEO_BOX_W = 1080                                   # box width  (<= CANVAS_W) - full width, no side margins
+VIDEO_BOX_H = 650                                    # box height (<= CANVAS_H)
+VIDEO_Y = 700                                        # y of the box's TOP edge.
+                                                       # Set this to any number
+                                                       # 0..(CANVAS_H -
+                                                       # VIDEO_BOX_H) to move
                                                        # the video up/down -
                                                        # e.g. 0 = flush with
                                                        # the top.
-# (the box is always horizontally centered: x = (CANVAS_W - VIDEO_BOX_W) / 2)
+# (the box is always horizontally centered: x = (CANVAS_W - VIDEO_BOX_W) / 2 -
+# which is 0 here since VIDEO_BOX_W == CANVAS_W)
 
-# How far the source is zoomed in before it's cropped to the box's aspect
-# ratio. 1.0 = crop just enough to match the box's shape, no extra zoom.
-# Above 1.0 crops in further (bigger subject, more of the original frame's
-# edges cut off). Overridable per-run with --zoom.
+# How much the source is cropped in beyond a plain fit-inside. 1.0 (default)
+# = show the FULL original frame, letterboxed inside the box if its aspect
+# ratio doesn't exactly match (nothing cropped away) - this is what the
+# reference template does. Above 1.0 switches to cropping in by that factor
+# and filling the box edge-to-edge instead (bigger subject, edges of the
+# original frame get cut off). Overridable per-run with --zoom.
 DEFAULT_ZOOM = 1.0
 
-# Background behind the video box (visible through VIDEO_BOX_W/H margins).
+# Background behind the video box (visible through the margins around it).
 BG_COLOR = "0x0d0d0d"
 GRID_SPACING = 54
 GRID_OPACITY = 0.05
 
-# Caption position: distance from the CANVAS BOTTOM edge up to the caption
-# text (this is how ffmpeg/ASS positions bottom-anchored text: bigger number
-# = higher up the screen, smaller number = closer to the bottom edge).
-# The default below computes to a position just above the video box's
-# bottom edge, but you can set CAPTION_MARGIN_V to any plain number
-# yourself to put the caption wherever you want on the canvas - lower on
-# the video, higher up overlapping it more, or even down in the background
-# margin below the video box.
-CAPTION_BOTTOM_PAD = 60                                # (used only by the default calc below)
-CAPTION_MARGIN_V = (CANVAS_H - (VIDEO_Y + VIDEO_BOX_H)) + CAPTION_BOTTOM_PAD
+# Captions sit in their own space below the video, never overlapping it.
+# CAPTION_MARGIN_TOP is the distance from the CANVAS TOP edge down to the
+# caption text (captions use top-anchored alignment, so multi-line text
+# grows downward from this point). The default puts it a fixed gap below
+# the video box's bottom edge, but you can set CAPTION_MARGIN_TOP to any
+# plain number yourself to move the caption independently of the video.
+CAPTION_GAP = 140                                      # (used only by the default calc below)
+CAPTION_MARGIN_TOP = VIDEO_Y + VIDEO_BOX_H + CAPTION_GAP
 
 # ============================================================================
 
 
 def _video_filter(zoom: float) -> str:
-    """Crop the source to the box's aspect ratio (centered), optionally zoom
-    in further, then scale to the exact box size - always fills the box
-    edge to edge, no letterboxing."""
-    zoom = max(zoom, 1.0)
+    """zoom <= 1.0 (default): fit the whole source frame inside the box,
+    preserving every pixel (letterboxed if the aspect ratio doesn't match -
+    nothing cropped). zoom > 1.0: crop in by that factor and scale to fill
+    the box completely instead (bigger subject, edges of the frame cut off)."""
+    if zoom <= 1.0:
+        return f"scale=w={VIDEO_BOX_W}:h={VIDEO_BOX_H}:force_original_aspect_ratio=decrease"
     return (
         f"crop='min(iw,ih*{VIDEO_BOX_W}/{VIDEO_BOX_H})':'min(ih,iw*{VIDEO_BOX_H}/{VIDEO_BOX_W})',"
         f"crop='iw/{zoom}':'ih/{zoom}',"
@@ -108,13 +115,15 @@ def _run_with_gpu_fallback(base_cmd: list[str], gpu_tail: list[str], cpu_tail: l
 
 
 def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool, zoom: float):
-    """Step: build the background + zoomed/cropped video box, centered per
-    the layout settings above. No captions yet - that's a separate burn pass
+    """Step: build the background + video box, per the layout settings
+    above. The video is centered within its box both ways - horizontally
+    always, and vertically too since a letterboxed (zoom<=1.0) video can be
+    shorter than the box. No captions yet - that's a separate burn pass
     once we know the caption text/timing."""
     filter_complex = (
         f"[1:v]drawgrid=width={GRID_SPACING}:height={GRID_SPACING}:thickness=1:color=white@{GRID_OPACITY}[bg];"
         f"[0:v]{_video_filter(zoom)}[vid];"
-        f"[bg][vid]overlay=x=(W-w)/2:y={VIDEO_Y}[outv]"
+        f"[bg][vid]overlay=x=(W-w)/2:y={VIDEO_Y}+({VIDEO_BOX_H}-h)/2[outv]"
     )
     base_cmd = [
         "ffmpeg", "-y", "-nostdin",
@@ -191,7 +200,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", type=Path, help="A landscape video file, or a folder of clips")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("template_output"), help="Where to write composed reels (default: ./template_output)")
-    parser.add_argument("--zoom", type=float, default=DEFAULT_ZOOM, help=f"Extra zoom-in factor beyond the box-fill crop, e.g. 1.3 = 30%% more zoomed in (default: {DEFAULT_ZOOM})")
+    parser.add_argument("--zoom", type=float, default=DEFAULT_ZOOM, help=f"1.0 (default) = show the full frame, letterboxed if needed, nothing cropped. Above 1.0 crops in by that factor and fills the box completely instead, e.g. 1.3 = crops in 30%% (default: {DEFAULT_ZOOM})")
     parser.add_argument("--no-captions", action="store_true", help="Compose the frame only, skip transcription")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size, ignored for --language hinglish (default: small)")
@@ -221,7 +230,7 @@ def main():
             text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
             outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
             bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
-            box=args.box, position="bottom", margin_v=CAPTION_MARGIN_V,
+            box=args.box, position="top", margin_v=CAPTION_MARGIN_TOP,
         )
     except ValueError as e:
         sys.exit(str(e))
