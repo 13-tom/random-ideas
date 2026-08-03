@@ -122,7 +122,7 @@ def _extract_wav(video_path: Path):
     """
     wav_path = Path(tempfile.mkstemp(suffix=".wav")[1])
     subprocess.run(
-        ["ffmpeg", "-y", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", str(wav_path)],
+        ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", str(wav_path)],
         check=True, capture_output=True,
     )
     return wav_path
@@ -223,7 +223,7 @@ def _escape_subtitles_path(srt_path: Path) -> str:
 
 def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu: bool = False):
     escaped_srt = _escape_subtitles_path(srt_path)
-    base_cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vf", f"subtitles={escaped_srt}"]
+    base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vf", f"subtitles={escaped_srt}"]
 
     if use_gpu:
         gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]

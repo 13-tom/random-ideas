@@ -389,7 +389,7 @@ def _build_zoom_path(gesture_samples, total_frames: int, fps: float):
 def _fixed_crop_video(input_path: Path, output_path: Path, x: int, y: int, crop_w: int, crop_h: int,
                        target_res: str, use_gpu: bool):
     vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale={target_res}"
-    base_cmd = ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf]
+    base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf]
 
     if use_gpu:
         gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
@@ -493,7 +493,7 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
     # (keeps quality/GPU-encode consistent with the rest of the pipeline
     # instead of using OpenCV's own encoder).
     ffmpeg_cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg", "-y", "-nostdin",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{pipe_w}x{pipe_h}", "-r", str(fps), "-i", "pipe:0",
         "-i", str(input_path),
         "-map", "0:v", "-map", "1:a?",

@@ -44,7 +44,7 @@ def nvenc_works() -> bool:
         return False
     try:
         result = subprocess.run(
-            ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
+            ["ffmpeg", "-y", "-nostdin", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
              "-c:v", "h264_nvenc", "-frames:v", "1", "-f", "null", "-"],
             capture_output=True, timeout=15,
         )

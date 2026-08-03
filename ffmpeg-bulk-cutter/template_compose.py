@@ -118,7 +118,7 @@ def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu
         f"[bg][vid]overlay=x=(W-w)/2:y={video_y}+({VIDEO_BOX_H}-h)/2[outv]"
     )
     base_cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg", "-y", "-nostdin",
         "-i", str(input_path),
         "-f", "lavfi", "-i", f"color=c={BG_COLOR}:s={CANVAS_W}x{CANVAS_H}:d={duration}",
         "-filter_complex", filter_complex,
@@ -130,7 +130,8 @@ def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return
-        print("  GPU encode failed at runtime, falling back to CPU (libx264)")
+        stderr_tail = result.stderr.decode(errors="replace").strip().splitlines()[-1:] if result.stderr else []
+        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + stderr_tail[0] if stderr_tail else ''}")
 
     cpu_cmd = base_cmd + ["-c:v", "libx264", "-c:a", "aac", "-shortest", str(framed_path)]
     subprocess.run(cpu_cmd, check=True)
@@ -198,13 +199,14 @@ def _escape_subtitles_path(path: Path) -> str:
 
 def burn_ass(video_path: Path, ass_path: Path, output_path: Path, use_gpu: bool):
     escaped = _escape_subtitles_path(ass_path)
-    base_cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vf", f"subtitles={escaped}"]
+    base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vf", f"subtitles={escaped}"]
     if use_gpu:
         gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return
-        print("  GPU encode failed at runtime, falling back to CPU (libx264)")
+        stderr_tail = result.stderr.decode(errors="replace").strip().splitlines()[-1:] if result.stderr else []
+        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + stderr_tail[0] if stderr_tail else ''}")
     cpu_cmd = base_cmd + ["-c:v", "libx264", "-c:a", "copy", str(output_path)]
     subprocess.run(cpu_cmd, check=True)
 

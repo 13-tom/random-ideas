@@ -87,7 +87,7 @@ def validate_clips(clips, video_path: Path):
 
 def _base_cut_cmd(input_path: Path, start: float, end: float) -> list[str]:
     return [
-        "ffmpeg", "-y",
+        "ffmpeg", "-y", "-nostdin",
         "-ss", format_timestamp(start),
         "-i", str(input_path),
         "-t", format_timestamp(end - start),

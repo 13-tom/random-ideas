@@ -89,7 +89,7 @@ ASPECT_PRESETS = {
 def reframe_video(input_path: Path, output_path: Path, aspect: str, use_gpu: bool = False):
     crop_expr, target_res = ASPECT_PRESETS[aspect]
     vf = f"{crop_expr},scale={target_res}"
-    base_cmd = ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf]
+    base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf]
 
     if use_gpu:
         gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
