@@ -24,6 +24,7 @@ Notes on language:
                         --model is ignored in this mode.
 """
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -120,7 +121,15 @@ def _extract_wav(video_path: Path):
     is malformed". Extracting to a real WAV file on disk first sidesteps
     this entirely, since ffmpeg can then open it normally (with seeking).
     """
-    wav_path = Path(tempfile.mkstemp(suffix=".wav")[1])
+    # mkstemp returns an open file descriptor as well as the path - it must
+    # be closed here (we don't write through it; ffmpeg writes to the path
+    # directly). Leaving it open is harmless on Linux but on Windows the
+    # dangling handle blocks ffmpeg/the pipeline from writing to or later
+    # deleting the file ("[WinError 32] The process cannot access the file
+    # because it is being used by another process").
+    fd, wav_path_str = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    wav_path = Path(wav_path_str)
     subprocess.run(
         ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", str(wav_path)],
         check=True, capture_output=True,

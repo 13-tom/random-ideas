@@ -104,13 +104,27 @@ def _video_filter(zoom: float) -> str:
     )
 
 
+def _gpu_error_reason(stderr: bytes) -> str:
+    """ffmpeg's actual failure reason is usually a few lines before its
+    generic final "Conversion failed!" banner - prefer a line that looks
+    like a real error/nvenc message, falling back to the last line."""
+    lines = stderr.decode(errors="replace").strip().splitlines()
+    if not lines:
+        return ""
+    for line in reversed(lines):
+        lowered = line.lower()
+        if "nvenc" in lowered or "error" in lowered or "failed" in lowered and "conversion failed" not in lowered:
+            return line.strip()
+    return lines[-1].strip()
+
+
 def _run_with_gpu_fallback(base_cmd: list[str], gpu_tail: list[str], cpu_tail: list[str], use_gpu: bool):
     if use_gpu:
         result = subprocess.run(base_cmd + gpu_tail, capture_output=True)
         if result.returncode == 0:
             return
-        stderr_tail = result.stderr.decode(errors="replace").strip().splitlines()[-1:] if result.stderr else []
-        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + stderr_tail[0] if stderr_tail else ''}")
+        reason = _gpu_error_reason(result.stderr) if result.stderr else ""
+        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + reason if reason else ''}")
     subprocess.run(base_cmd + cpu_tail, check=True)
 
 
