@@ -27,6 +27,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import gpu_utils
@@ -101,12 +102,35 @@ def transcribe_to_srt(model, video_path: Path, srt_path: Path, language: str | N
     return count, info.language
 
 
-def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
-    result = pipe(
-        str(video_path),
-        return_timestamps=True,
-        generate_kwargs={"task": "transcribe", "language": "en"},
+def _extract_wav(video_path: Path):
+    """Decode a video's audio to a standalone 16kHz mono WAV file.
+
+    The Hinglish pipeline reads its input by piping raw file bytes into
+    ffmpeg over stdin, which requires ffmpeg to seek to the MP4 'moov atom
+    - if that atom lands at the end of the file (common; depends on the
+    encoder that wrote it), stdin can't be sought and ffmpeg silently
+    produces zero audio bytes, which the pipeline then reports as "soundfile
+    is malformed". Extracting to a real WAV file on disk first sidesteps
+    this entirely, since ffmpeg can then open it normally (with seeking).
+    """
+    wav_path = Path(tempfile.mkstemp(suffix=".wav")[1])
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", str(wav_path)],
+        check=True, capture_output=True,
     )
+    return wav_path
+
+
+def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
+    wav_path = _extract_wav(video_path)
+    try:
+        result = pipe(
+            str(wav_path),
+            return_timestamps=True,
+            generate_kwargs={"task": "transcribe", "language": "en"},
+        )
+    finally:
+        wav_path.unlink(missing_ok=True)
     chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
     duration = get_media_duration(video_path)
 
@@ -148,11 +172,15 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
     interpolate per-word timing proportionally by character length -
     approximate, but reads fine for on-screen captions.
     """
-    result = pipe(
-        str(video_path),
-        return_timestamps=True,
-        generate_kwargs={"task": "transcribe", "language": "en"},
-    )
+    wav_path = _extract_wav(video_path)
+    try:
+        result = pipe(
+            str(wav_path),
+            return_timestamps=True,
+            generate_kwargs={"task": "transcribe", "language": "en"},
+        )
+    finally:
+        wav_path.unlink(missing_ok=True)
     chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
     duration = get_media_duration(video_path)
 

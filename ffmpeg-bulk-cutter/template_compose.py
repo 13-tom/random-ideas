@@ -24,6 +24,7 @@ Usage:
     python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
     python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
     python template_compose.py clips/ -o template_output --headline "..." --language hinglish
+    python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.2   # 20% zoom-in, crops edges to fill the box
 
 Headline markup: wrap a word in *asterisks* to render it in the highlight
 color (e.g. "ELON MUSK *WARNS* EVERYONE" highlights just "WARNS"), matching
@@ -89,13 +90,28 @@ def caption_margin_v_for(video_y: int) -> int:
     return subtitle_zone_top + CAPTION_TOP_PAD
 
 
-def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool, video_y: int):
-    """Letterbox the source video inside the Main Content Zone over a
-    faintly-textured dark background, preserving the full original frame
-    (no cropping) with visible negative-space margins."""
+def _video_filter(zoom: float) -> str:
+    """zoom <= 1.0 (default): fit the whole source frame inside the box,
+    preserving every pixel (letterboxed, negative-space margins around it).
+    zoom > 1.0: crop in by that factor and scale to fill the box completely
+    (e.g. 1.2 = 20% zoomed in, edges of the frame get cropped away, subject
+    reads bigger) - centered both times, since ffmpeg's crop defaults to
+    centering when x/y are omitted."""
+    if zoom <= 1.0:
+        return f"scale=w={VIDEO_BOX_W}:h={VIDEO_BOX_H}:force_original_aspect_ratio=decrease"
+    return (
+        f"crop='min(iw,ih*{VIDEO_BOX_W}/{VIDEO_BOX_H})':'min(ih,iw*{VIDEO_BOX_H}/{VIDEO_BOX_W})',"
+        f"crop='iw/{zoom}':'ih/{zoom}',"
+        f"scale={VIDEO_BOX_W}:{VIDEO_BOX_H}"
+    )
+
+
+def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool, video_y: int, zoom: float = 1.0):
+    """Letterbox (or, with zoom > 1.0, zoom-and-fill) the source video inside
+    the Main Content Zone over a faintly-textured dark background."""
     filter_complex = (
         f"[1:v]drawgrid=width={GRID_SPACING}:height={GRID_SPACING}:thickness=1:color=white@{GRID_OPACITY}[bg];"
-        f"[0:v]scale=w={VIDEO_BOX_W}:h={VIDEO_BOX_H}:force_original_aspect_ratio=decrease[vid];"
+        f"[0:v]{_video_filter(zoom)}[vid];"
         f"[bg][vid]overlay=x=(W-w)/2:y={video_y}+({VIDEO_BOX_H}-h)/2[outv]"
     )
     base_cmd = [
@@ -197,7 +213,7 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, arg
     duration = get_media_duration(video_path)
     framed_path = output_dir / f"{video_path.stem}_framed.mp4"
     has_heading = bool(args.headline or args.brand)
-    _compose_frame(video_path, framed_path, duration, use_gpu_encode, video_y_for(has_heading))
+    _compose_frame(video_path, framed_path, duration, use_gpu_encode, video_y_for(has_heading), args.zoom)
 
     caption_words = None
     if not args.no_captions:
@@ -239,6 +255,7 @@ def main():
     parser.add_argument("--headline-font-size", type=int, default=58, help="Headline font size (default: 58)")
     parser.add_argument("--brand-color", default="#FFD400", help="Brand pill background color (default: #FFD400)")
     parser.add_argument("--brand-font-size", type=int, default=32, help="Brand pill font size (default: 32)")
+    parser.add_argument("--zoom", type=float, default=1.0, help="Zoom in on the clip before fitting it into the content zone, e.g. 1.2 = 20%% zoom-in. Crops the edges to fill the box completely (centered) instead of leaving letterbox margins around the clip itself. Default: 1.0 = no extra zoom, shows the full frame with negative-space margins.")
     parser.add_argument("--no-captions", action="store_true", help="Skip transcription; compose the frame + headline only")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size, ignored for --language hinglish (default: small)")
@@ -316,14 +333,21 @@ def main():
             from add_subtitles import load_whisper_model
             model = load_whisper_model(args.model, use_gpu_whisper)
 
+    failures = []
     for i, video_path in enumerate(videos, start=1):
-        process_video(
-            video_path, args.output_dir, i, len(videos), args=args, model=model, pipe=pipe,
-            caption_style=caption_style, headline_style=headline_style, brand_style=brand_style,
-            use_gpu_encode=use_gpu_encode, use_gpu_whisper=use_gpu_whisper,
-        )
+        try:
+            process_video(
+                video_path, args.output_dir, i, len(videos), args=args, model=model, pipe=pipe,
+                caption_style=caption_style, headline_style=headline_style, brand_style=brand_style,
+                use_gpu_encode=use_gpu_encode, use_gpu_whisper=use_gpu_whisper,
+            )
+        except Exception as e:
+            print(f"    FAILED: {video_path.name}: {e}")
+            failures.append(video_path.name)
 
     print(f"\nDone. Output in {args.output_dir}/")
+    if failures:
+        print(f"{len(failures)}/{len(videos)} clip(s) failed: {', '.join(failures)}")
 
 
 if __name__ == "__main__":

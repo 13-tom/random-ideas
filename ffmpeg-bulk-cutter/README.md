@@ -327,7 +327,19 @@ up too.
 python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
 python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
 python template_compose.py clips/ -o template_output --headline "..." --language hinglish
+python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.2
 ```
+
+`--zoom` (default `1.0`) zooms in on the clip before it goes into the
+content zone - `1.2` = 20% zoomed in. Past `1.0` it stops fitting the whole
+frame inside the box and instead crops in (centered) and scales to fill the
+box completely, so the subject reads bigger at the cost of cropping the
+edges of the original frame - the opposite trade-off from the default
+"show everything, no cropping" behavior.
+
+If one clip in a batch fails (bad audio, corrupt file, etc.) it's reported
+and skipped - the rest of the batch still runs, rather than the whole
+command aborting.
 
 - `--headline "TEXT"` — top-zone headline. Wrap a word in `*asterisks*` to
   render it in the highlight color, e.g. `"SAM ALTMAN *WARNS* ABOUT AI"`
