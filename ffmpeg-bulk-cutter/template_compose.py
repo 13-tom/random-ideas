@@ -1,107 +1,88 @@
 #!/usr/bin/env python3
-"""Compose a landscape clip into a fixed 3-zone vertical Reel template:
+"""Compose a landscape clip onto a vertical (1080x1920) canvas: the clip is
+zoomed in and cropped to fill a centered box, over a faintly-textured dark
+background, with spoken captions burned directly on top of the video near
+its bottom edge.
 
     +--------------------------+
-    |   Top Zone (headline +   |   ~320px  - brand pill + headline text
-    |   brand)                 |
-    +--------------------------+
-    |                          |
-    |   Main Content Zone      |   original 16:9 video, LETTERBOXED
-    |   (video, not cropped)   |   (not cropped) with visible side/top
-    |                          |   margins so it doesn't touch the edges
-    +--------------------------+
-    |   Reading Zone            |   spoken captions, placed BELOW the
-    |   (captions)              |   video (not overlaid on top of it)
+    |   (background, faint      |
+    |    grid texture)          |
+    |   +--------------------+  |
+    |   |                    |  |
+    |   |   video, zoomed    |  |
+    |   |   in and cropped   |  |
+    |   |   to fill the box  |  |
+    |   |                    |  |
+    |   |   [captions here]  |  |  <- overlaid on the video, near its bottom
+    |   +--------------------+  |
+    |                            |
     +--------------------------+
 
-This is a different shape from reframe.py's crop-to-fill approach: instead
-of cropping the source to fill the whole 9:16 frame, it shrinks the source
-to fit inside a box and pads around it, so the full original frame stays
-visible. The background isn't flat black - a very faint grid (drawgrid) is
-layered in for a bit of texture instead of dead space.
+All the layout numbers (box size, position, margins, where the captions
+sit) are plain constants right below this docstring - edit them directly
+to change the layout, no need to read the rest of the file.
 
 Usage:
-    python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
-    python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
-    python template_compose.py clips/ -o template_output --headline "..." --language hinglish
-    python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.2   # 20% zoom-in, crops edges to fill the box
-
-Headline markup: wrap a word in *asterisks* to render it in the highlight
-color (e.g. "ELON MUSK *WARNS* EVERYONE" highlights just "WARNS"), matching
-the yellow-keyword look common in this template style.
-
-Captions in the Reading Zone reuse the same transcription + styling engine
-as add_subtitles.py (--language, --caption-style, --font, colors, etc.) -
-see add_subtitles.py --help for what each of those does. Pass --no-captions
-to compose the frame + headline only, with no transcription.
+    python template_compose.py clip.mp4 -o reel.mp4
+    python template_compose.py clips/ -o template_output --language hinglish
+    python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3
 """
 import argparse
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import gpu_utils
-from captions import (
-    EVENTS_FORMAT_LINE,
-    STYLES_FORMAT_LINE,
-    CaptionStyle,
-    _ass_override_color,
-    _escape_ass_text,
-    _style_line,
-    format_ass_timestamp,
-    highlight_mode_dialogue_lines,
-    parse_color,
-    word_mode_dialogue_lines,
-)
+from captions import CaptionStyle, parse_color, write_ass_highlight_mode, write_ass_word_mode
 from ffmpeg_utils import get_media_duration
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
-# --- Template geometry (all in pixels on a fixed 1080x1920 canvas) ---
-CANVAS_W, CANVAS_H = 1080, 1920
-TOP_ZONE_H = 320                                    # headline + brand zone (only reserved if used)
-SIDE_MARGIN = 60                                    # video's negative space, left/right (and top, when there's no heading)
-VIDEO_GAP_TOP = 40                                  # gap between top zone and video
-VIDEO_BOX_W = CANVAS_W - 2 * SIDE_MARGIN            # 960
-VIDEO_BOX_H = round(VIDEO_BOX_W * 9 / 16)           # 540 - sized for a 16:9 source
-CAPTION_GAP = 50                                    # gap between video and reading zone
-CAPTION_TOP_PAD = 30                                # padding from the reading zone's top edge to the caption text
+# ============================================================================
+# LAYOUT SETTINGS - edit these directly to change the canvas. Nothing below
+# this block needs to change to move/resize the video or captions.
+# ============================================================================
 
-BRAND_MARGIN_V = 30
-HEADLINE_MARGIN_V = 110
+CANVAS_W = 1080
+CANVAS_H = 1920
 
+# The video's box: size and position on the canvas.
+VIDEO_BOX_W = 1000                                   # box width  (<= CANVAS_W)
+VIDEO_BOX_H = 1720                                   # box height (<= CANVAS_H)
+VIDEO_Y = (CANVAS_H - VIDEO_BOX_H) // 2               # y of the box's TOP edge.
+                                                       # Current value = dead
+                                                       # center. Set this to
+                                                       # any number 0..(CANVAS_H
+                                                       # - VIDEO_BOX_H) to move
+                                                       # the video up/down -
+                                                       # e.g. 0 = flush with
+                                                       # the top.
+# (the box is always horizontally centered: x = (CANVAS_W - VIDEO_BOX_W) / 2)
+
+# How far the source is zoomed in before it's cropped to the box's aspect
+# ratio. 1.0 = crop just enough to match the box's shape, no extra zoom.
+# Above 1.0 crops in further (bigger subject, more of the original frame's
+# edges cut off). Overridable per-run with --zoom.
+DEFAULT_ZOOM = 1.0
+
+# Background behind the video box (visible through VIDEO_BOX_W/H margins).
 BG_COLOR = "0x0d0d0d"
 GRID_SPACING = 54
 GRID_OPACITY = 0.05
 
+# Captions are overlaid ON the video, this many pixels above the video
+# box's bottom edge.
+CAPTION_BOTTOM_PAD = 60
 
-def video_y_for(has_heading: bool) -> int:
-    """Top zone only takes up space if it's actually used (--headline/--brand);
-    otherwise the clip is centered vertically in the canvas instead of
-    hugging the top margin."""
-    if has_heading:
-        return TOP_ZONE_H + VIDEO_GAP_TOP
-    return (CANVAS_H - VIDEO_BOX_H) // 2
-
-
-def caption_margin_v_for(video_y: int) -> int:
-    """Distance from the canvas top to the caption text (captions use
-    top-anchored alignment), derived from wherever the video actually ends."""
-    subtitle_zone_top = video_y + VIDEO_BOX_H + CAPTION_GAP
-    return subtitle_zone_top + CAPTION_TOP_PAD
+# ============================================================================
 
 
 def _video_filter(zoom: float) -> str:
-    """zoom <= 1.0 (default): fit the whole source frame inside the box,
-    preserving every pixel (letterboxed, negative-space margins around it).
-    zoom > 1.0: crop in by that factor and scale to fill the box completely
-    (e.g. 1.2 = 20% zoomed in, edges of the frame get cropped away, subject
-    reads bigger) - centered both times, since ffmpeg's crop defaults to
-    centering when x/y are omitted."""
-    if zoom <= 1.0:
-        return f"scale=w={VIDEO_BOX_W}:h={VIDEO_BOX_H}:force_original_aspect_ratio=decrease"
+    """Crop the source to the box's aspect ratio (centered), optionally zoom
+    in further, then scale to the exact box size - always fills the box
+    edge to edge, no letterboxing."""
+    zoom = max(zoom, 1.0)
     return (
         f"crop='min(iw,ih*{VIDEO_BOX_W}/{VIDEO_BOX_H})':'min(ih,iw*{VIDEO_BOX_H}/{VIDEO_BOX_W})',"
         f"crop='iw/{zoom}':'ih/{zoom}',"
@@ -109,13 +90,24 @@ def _video_filter(zoom: float) -> str:
     )
 
 
-def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool, video_y: int, zoom: float = 1.0):
-    """Letterbox (or, with zoom > 1.0, zoom-and-fill) the source video inside
-    the Main Content Zone over a faintly-textured dark background."""
+def _run_with_gpu_fallback(base_cmd: list[str], gpu_tail: list[str], cpu_tail: list[str], use_gpu: bool):
+    if use_gpu:
+        result = subprocess.run(base_cmd + gpu_tail, capture_output=True)
+        if result.returncode == 0:
+            return
+        stderr_tail = result.stderr.decode(errors="replace").strip().splitlines()[-1:] if result.stderr else []
+        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + stderr_tail[0] if stderr_tail else ''}")
+    subprocess.run(base_cmd + cpu_tail, check=True)
+
+
+def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu: bool, zoom: float):
+    """Step: build the background + zoomed/cropped video box, centered per
+    the layout settings above. No captions yet - that's a separate burn pass
+    once we know the caption text/timing."""
     filter_complex = (
         f"[1:v]drawgrid=width={GRID_SPACING}:height={GRID_SPACING}:thickness=1:color=white@{GRID_OPACITY}[bg];"
         f"[0:v]{_video_filter(zoom)}[vid];"
-        f"[bg][vid]overlay=x=(W-w)/2:y={video_y}+({VIDEO_BOX_H}-h)/2[outv]"
+        f"[bg][vid]overlay=x=(W-w)/2:y={VIDEO_Y}[outv]"
     )
     base_cmd = [
         "ffmpeg", "-y", "-nostdin",
@@ -124,73 +116,12 @@ def _compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu
         "-filter_complex", filter_complex,
         "-map", "[outv]", "-map", "0:a?",
     ]
-
-    if use_gpu:
-        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "aac", "-shortest", str(framed_path)]
-        result = subprocess.run(gpu_cmd, capture_output=True)
-        if result.returncode == 0:
-            return
-        stderr_tail = result.stderr.decode(errors="replace").strip().splitlines()[-1:] if result.stderr else []
-        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + stderr_tail[0] if stderr_tail else ''}")
-
-    cpu_cmd = base_cmd + ["-c:v", "libx264", "-c:a", "aac", "-shortest", str(framed_path)]
-    subprocess.run(cpu_cmd, check=True)
-
-
-def _parse_headline_markup(text: str, base_rgb: tuple, highlight_rgb: tuple) -> str:
-    """'*word*' -> that word rendered in highlight_rgb, rest in base_rgb."""
-    base_tag = _ass_override_color(base_rgb)
-    highlight_tag = _ass_override_color(highlight_rgb)
-    parts = re.split(r"(\*[^*]+\*)", text)
-    out = [f"{{\\c{base_tag}}}"]
-    for part in parts:
-        if not part:
-            continue
-        if part.startswith("*") and part.endswith("*") and len(part) > 2:
-            out.append(f"{{\\c{highlight_tag}}}{_escape_ass_text(part[1:-1])}{{\\c{base_tag}}}")
-        else:
-            out.append(_escape_ass_text(part))
-    return "".join(out)
-
-
-def write_template_ass(
-    ass_path: Path, duration: float, *,
-    headline: str | None, headline_style: CaptionStyle, headline_highlight_rgb: tuple,
-    brand: str | None, brand_style: CaptionStyle,
-    caption_words: list | None, caption_style: CaptionStyle, caption_mode: str, max_words: int,
-) -> None:
-    lines = [
-        "[Script Info]\n", "ScriptType: v4.00+\n",
-        f"PlayResX: {CANVAS_W}\n", f"PlayResY: {CANVAS_H}\n",
-        "ScaledBorderAndShadow: yes\n", "\n",
-        "[V4+ Styles]\n", STYLES_FORMAT_LINE,
-    ]
-    if headline:
-        lines.append(_style_line("Headline", headline_style, headline_style.text_rgb, headline_style.outline_rgb, border_style=1))
-    if brand:
-        # BorderStyle=3 -> OutlineColour fills an opaque box behind the
-        # text (same trick used for --box word-highlight captions).
-        lines.append(_style_line("Brand", brand_style, brand_style.text_rgb, brand_style.outline_rgb, border_style=3))
-    if caption_words:
-        lines.append(_style_line("Default", caption_style, caption_style.text_rgb, caption_style.outline_rgb, border_style=1))
-        if caption_style.box:
-            lines.append(_style_line("Highlight", caption_style, (0, 0, 0), caption_style.highlight_rgb, border_style=3))
-
-    lines += ["\n", "[Events]\n", EVENTS_FORMAT_LINE]
-
-    if headline:
-        text = _parse_headline_markup(headline, headline_style.text_rgb, headline_highlight_rgb)
-        lines.append(f"Dialogue: 0,{format_ass_timestamp(0)},{format_ass_timestamp(duration)},Headline,,0,0,0,,{text}\n")
-    if brand:
-        lines.append(f"Dialogue: 0,{format_ass_timestamp(0)},{format_ass_timestamp(duration)},Brand,,0,0,0,,{_escape_ass_text(brand)}\n")
-    if caption_words:
-        if caption_mode == "word":
-            dialogue_lines, _ = word_mode_dialogue_lines(caption_words, caption_style)
-        else:
-            dialogue_lines, _ = highlight_mode_dialogue_lines(caption_words, caption_style, max_words)
-        lines += dialogue_lines
-
-    ass_path.write_text("".join(lines), encoding="utf-8")
+    _run_with_gpu_fallback(
+        base_cmd,
+        ["-c:v", "h264_nvenc", "-c:a", "aac", "-shortest", str(framed_path)],
+        ["-c:v", "libx264", "-c:a", "aac", "-shortest", str(framed_path)],
+        use_gpu,
+    )
 
 
 def _escape_subtitles_path(path: Path) -> str:
@@ -198,29 +129,26 @@ def _escape_subtitles_path(path: Path) -> str:
 
 
 def burn_ass(video_path: Path, ass_path: Path, output_path: Path, use_gpu: bool):
+    """Step: burn the caption .ass file into the composed video - this is a
+    separate ffmpeg pass from compose_frame, after transcription."""
     escaped = _escape_subtitles_path(ass_path)
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vf", f"subtitles={escaped}"]
-    if use_gpu:
-        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
-        result = subprocess.run(gpu_cmd, capture_output=True)
-        if result.returncode == 0:
-            return
-        stderr_tail = result.stderr.decode(errors="replace").strip().splitlines()[-1:] if result.stderr else []
-        print(f"  GPU encode failed at runtime, falling back to CPU (libx264){': ' + stderr_tail[0] if stderr_tail else ''}")
-    cpu_cmd = base_cmd + ["-c:v", "libx264", "-c:a", "copy", str(output_path)]
-    subprocess.run(cpu_cmd, check=True)
+    _run_with_gpu_fallback(
+        base_cmd,
+        ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)],
+        ["-c:v", "libx264", "-c:a", "copy", str(output_path)],
+        use_gpu,
+    )
 
 
 def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, args, model=None, pipe=None,
-                   caption_style: CaptionStyle, headline_style: CaptionStyle, brand_style: CaptionStyle,
-                   use_gpu_encode: bool, use_gpu_whisper: bool):
+                   caption_style: CaptionStyle, use_gpu_encode: bool):
     print(f"[{i}/{total}] Composing {video_path.name}...")
     duration = get_media_duration(video_path)
     framed_path = output_dir / f"{video_path.stem}_framed.mp4"
-    has_heading = bool(args.headline or args.brand)
-    _compose_frame(video_path, framed_path, duration, use_gpu_encode, video_y_for(has_heading), args.zoom)
+    compose_frame(video_path, framed_path, duration, use_gpu_encode, args.zoom)
 
-    caption_words = None
+    caption_words = []
     if not args.no_captions:
         print(f"    Transcribing ({args.language})...")
         if pipe is not None:
@@ -236,16 +164,15 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, arg
                   "Check the clip actually has audible speech (not just music/silence), "
                   "or try --language auto or --language en to compare.")
 
-    ass_path = output_dir / f"{video_path.stem}.ass"
-    write_template_ass(
-        ass_path, duration,
-        headline=args.headline, headline_style=headline_style, headline_highlight_rgb=parse_color(args.headline_highlight_color),
-        brand=args.brand, brand_style=brand_style,
-        caption_words=caption_words, caption_style=caption_style, caption_mode=args.caption_style, max_words=args.max_words,
-    )
-
     output_path = output_dir / f"{video_path.stem}_reel{video_path.suffix}"
-    if args.headline or args.brand or caption_words:
+    if caption_words:
+        ass_path = output_dir / f"{video_path.stem}.ass"
+        video_res = (CANVAS_W, CANVAS_H)
+        if args.caption_style == "word":
+            write_ass_word_mode(caption_words, ass_path, video_res, caption_style)
+        else:
+            write_ass_highlight_mode(caption_words, ass_path, video_res, caption_style, args.max_words)
+        print(f"    Burning captions...")
         burn_ass(framed_path, ass_path, output_path, use_gpu_encode)
         framed_path.unlink()
     else:
@@ -257,16 +184,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", type=Path, help="A landscape video file, or a folder of clips")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("template_output"), help="Where to write composed reels (default: ./template_output)")
-    parser.add_argument("--headline", default=None, help="Headline text for the top zone. Wrap a word in *asterisks* to highlight it, e.g. \"SAM ALTMAN *WARNS* ABOUT AI\"")
-    parser.add_argument("--brand", default=None, help="Small brand/handle text shown as a pill above the headline, e.g. \"aieverymorning\"")
-    parser.add_argument("--headline-color", default="white", help="Headline text color (default: white)")
-    parser.add_argument("--headline-highlight-color", default="yellow", help="Color for *highlighted* headline words (default: yellow)")
-    parser.add_argument("--headline-font", default="Arial", help="Headline font family (default: Arial)")
-    parser.add_argument("--headline-font-size", type=int, default=58, help="Headline font size (default: 58)")
-    parser.add_argument("--brand-color", default="#FFD400", help="Brand pill background color (default: #FFD400)")
-    parser.add_argument("--brand-font-size", type=int, default=32, help="Brand pill font size (default: 32)")
-    parser.add_argument("--zoom", type=float, default=1.2, help="Zoom in on the clip before fitting it into the content zone, e.g. 1.2 = 20%% zoom-in (this is now the default). Crops the edges to fill the box completely (centered) instead of leaving letterbox margins around the clip itself. Pass --zoom 1.0 to disable and show the full frame with negative-space margins instead.")
-    parser.add_argument("--no-captions", action="store_true", help="Skip transcription; compose the frame + headline only")
+    parser.add_argument("--zoom", type=float, default=DEFAULT_ZOOM, help=f"Extra zoom-in factor beyond the box-fill crop, e.g. 1.3 = 30%% more zoomed in (default: {DEFAULT_ZOOM})")
+    parser.add_argument("--no-captions", action="store_true", help="Compose the frame only, skip transcription")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size, ignored for --language hinglish (default: small)")
     parser.add_argument("--caption-style", choices=["word", "highlight"], default="highlight", help="word = one word at a time. highlight = full line with active word highlighted (default: highlight)")
@@ -289,26 +208,16 @@ def main():
     if not args.input.exists():
         sys.exit(f"Input not found: {args.input}")
 
-    has_heading = bool(args.headline or args.brand)
-    caption_margin_v = caption_margin_v_for(video_y_for(has_heading))
+    video_bottom = VIDEO_Y + VIDEO_BOX_H
+    caption_margin_v = (CANVAS_H - video_bottom) + CAPTION_BOTTOM_PAD
 
     try:
-        headline_style = CaptionStyle(
-            font=args.headline_font, font_size=args.headline_font_size,
-            text_rgb=parse_color(args.headline_color), outline_rgb=(0, 0, 0), outline_width=3,
-            bold=True, position="top", margin_v=HEADLINE_MARGIN_V,
-        )
-        brand_style = CaptionStyle(
-            font=args.headline_font, font_size=args.brand_font_size,
-            text_rgb=(0, 0, 0), outline_rgb=parse_color(args.brand_color),
-            bold=True, position="top", margin_v=BRAND_MARGIN_V,
-        )
         caption_style = CaptionStyle(
             font=args.font, font_size=args.font_size,
             text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
             outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
             bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
-            box=args.box, position="top", margin_v=caption_margin_v,
+            box=args.box, position="bottom", margin_v=caption_margin_v,
         )
     except ValueError as e:
         sys.exit(str(e))
@@ -348,8 +257,7 @@ def main():
         try:
             process_video(
                 video_path, args.output_dir, i, len(videos), args=args, model=model, pipe=pipe,
-                caption_style=caption_style, headline_style=headline_style, brand_style=brand_style,
-                use_gpu_encode=use_gpu_encode, use_gpu_whisper=use_gpu_whisper,
+                caption_style=caption_style, use_gpu_encode=use_gpu_encode,
             )
         except Exception as e:
             print(f"    FAILED: {video_path.name}: {e}")

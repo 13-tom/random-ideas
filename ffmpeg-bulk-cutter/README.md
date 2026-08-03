@@ -292,50 +292,52 @@ own per-word alignment. It reads fine on screen, but isn't frame-perfect
 the way the English/Hindi path (faster-whisper, which does give real
 per-word timestamps) is.
 
-## Fixed 3-zone Reel template (`template_compose.py`)
+## Centered Reel template (`template_compose.py`)
 
 This is a different look from `reframe.py` above. `reframe.py --track-faces`
-*crops* the source to fill the whole 9:16 frame (good for talking-head
-footage where you want the subject to fill the screen). `template_compose.py`
-instead builds a fixed layout, matching the "headline / clip / captions
-below" style you see on accounts like aieverymorning:
+crops the source to fill the *entire* 9:16 frame edge to edge.
+`template_compose.py` instead places the clip in a centered box with visible
+negative-space margins around it, over a faintly-textured dark background,
+with spoken captions burned directly onto the video near its bottom edge:
 
 ```
 +--------------------------+
-|  Brand pill + headline    |  ~320px zone, top
-+--------------------------+
+|   (background, faint      |
+|    grid texture)          |
+|   +--------------------+  |
+|   |                    |  |
+|   |   video, zoomed    |  |
+|   |   in and cropped   |  |
+|   |   to fill the box  |  |
+|   |                    |  |
+|   |   [captions here]  |  |  <- overlaid on the video, near its bottom
+|   +--------------------+  |
 |                            |
-|   original 16:9 clip,     |  letterboxed, NOT cropped - the
-|   shrunk to fit            |  full source frame stays visible,
-|   (negative-space margins) |  with visible margins around it
-|                            |
-+--------------------------+
-|  Spoken captions,          |  directly below the clip, not
-|  placed below the clip     |  overlaid on top of it
 +--------------------------+
 ```
 
 The background isn't flat black - it's a very faint grid texture (ffmpeg's
-`drawgrid`, ~5% opacity) so it doesn't look like dead space on camera.
-
-The top zone only exists if you actually use it - leave off both
-`--headline` and `--brand` and the clip is centered vertically in the
-canvas instead of sitting in a fixed spot below a blank zone, and the
-caption zone follows it down.
+`drawgrid`, ~5% opacity) so the margins don't look like dead space.
 
 ```
-python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
-python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
-python template_compose.py clips/ -o template_output --headline "..." --language hinglish
-python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.0   # disable the default zoom, show the full frame
+python template_compose.py clip.mp4 -o reel.mp4
+python template_compose.py clips/ -o template_output --language hinglish
+python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3
 ```
 
-`--zoom` (default `1.2`, i.e. 20% zoomed in) zooms in on the clip before it
-goes into the content zone. Above `1.0` it stops fitting the whole frame
-inside the box and instead crops in (centered) and scales to fill the
-box completely, so the subject reads bigger at the cost of cropping the
-edges of the original frame - the opposite trade-off from the default
-"show everything, no cropping" behavior.
+Every layout number - the video box's size, its vertical position, the
+background, how close the captions sit to the video's bottom edge - is a
+plain, heavily-commented constant at the top of `template_compose.py`
+(`VIDEO_BOX_W`, `VIDEO_BOX_H`, `VIDEO_Y`, etc.). Edit those directly to
+reposition or resize things; nothing else in the file needs to change.
+`VIDEO_Y` in particular is the video box's top-edge y-coordinate - its
+default value is dead center, but you can set it to any number to move the
+video up or down.
+
+`--zoom` (default `1.0`) is an *extra* zoom-in on top of the crop that
+already happens to fill the box's shape - e.g. `--zoom 1.3` crops in 30%
+further, so the subject reads bigger at the cost of more of the original
+frame's edges being cut off.
 
 If one clip in a batch fails (bad audio, corrupt file, etc.) it's reported
 and skipped - the rest of the batch still runs, rather than the whole
