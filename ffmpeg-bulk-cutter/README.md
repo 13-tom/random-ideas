@@ -292,6 +292,64 @@ own per-word alignment. It reads fine on screen, but isn't frame-perfect
 the way the English/Hindi path (faster-whisper, which does give real
 per-word timestamps) is.
 
+## Fixed 3-zone Reel template (`template_compose.py`)
+
+This is a different look from `reframe.py` above. `reframe.py --track-faces`
+*crops* the source to fill the whole 9:16 frame (good for talking-head
+footage where you want the subject to fill the screen). `template_compose.py`
+instead builds a fixed layout, matching the "headline / clip / captions
+below" style you see on accounts like aieverymorning:
+
+```
++--------------------------+
+|  Brand pill + headline    |  ~320px zone, top
++--------------------------+
+|                            |
+|   original 16:9 clip,     |  letterboxed, NOT cropped - the
+|   shrunk to fit            |  full source frame stays visible,
+|   (negative-space margins) |  with visible margins around it
+|                            |
++--------------------------+
+|  Spoken captions,          |  directly below the clip, not
+|  placed below the clip     |  overlaid on top of it
++--------------------------+
+```
+
+The background isn't flat black - it's a very faint grid texture (ffmpeg's
+`drawgrid`, ~5% opacity) so it doesn't look like dead space on camera.
+
+```
+python template_compose.py clip.mp4 -o reel.mp4 --headline "SAM ALTMAN *WARNS* ABOUT AI"
+python template_compose.py clip.mp4 -o reel.mp4 --headline "..." --brand "aieverymorning"
+python template_compose.py clips/ -o template_output --headline "..." --language hinglish
+```
+
+- `--headline "TEXT"` — top-zone headline. Wrap a word in `*asterisks*` to
+  render it in the highlight color, e.g. `"SAM ALTMAN *WARNS* ABOUT AI"`
+  highlights just "WARNS" (matches the yellow-keyword look in the reference
+  template). Wraps to a second line automatically if it's long.
+- `--brand "TEXT"` — small pill/badge above the headline (e.g. an account
+  handle). Uses the same opaque-box ASS trick as `--box` captions.
+- `--headline-color`, `--headline-highlight-color`, `--headline-font`,
+  `--headline-font-size`, `--brand-color`, `--brand-font-size` — styling for
+  the above.
+- Captions in the reading zone reuse the exact same transcription/styling
+  engine as `add_subtitles.py` — `--language`, `--model`, `--caption-style`
+  (`word`/`highlight`), `--font`, `--font-size`, `--text-color`,
+  `--highlight-color`, `--outline-color`/`--outline-width`, `--no-bold`,
+  `--italic`, `--all-caps`, `--box`, `--max-words` all work the same way (see
+  the "Styled captions" section above). Position is fixed to the reading
+  zone below the clip - not configurable here, since that's the whole point
+  of the template.
+- `--no-captions` — compose the frame + headline/brand only, skip
+  transcription (useful if you want to add captions separately, or none).
+
+The source clip's own aspect ratio doesn't have to be exactly 16:9 - it's
+scaled to fit inside the content zone's box while preserving its own aspect
+ratio (`force_original_aspect_ratio=decrease`), so anything landscape-ish
+works. Audio comes from the source clip, GPU/CPU encoding falls back
+automatically the same way every other script here does.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, reframing, and subtitling together — raw

@@ -18,6 +18,13 @@ NAMED_COLORS = {
 
 POSITION_ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}
 
+STYLES_FORMAT_LINE = (
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+    "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+    "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+)
+EVENTS_FORMAT_LINE = "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+
 
 @dataclass
 class Word:
@@ -122,9 +129,7 @@ def _ass_header(video_width: int, video_height: int, style: CaptionStyle) -> str
         "ScaledBorderAndShadow: yes\n",
         "\n",
         "[V4+ Styles]\n",
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
-        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-        "Alignment, MarginL, MarginR, MarginV, Encoding\n",
+        STYLES_FORMAT_LINE,
         _style_line("Default", style, style.text_rgb, style.outline_rgb, border_style=1),
     ]
     if style.box:
@@ -134,7 +139,7 @@ def _ass_header(video_width: int, video_height: int, style: CaptionStyle) -> str
         # against the highlight color.
         box_text_rgb = _readable_text_on(style.highlight_rgb)
         lines.append(_style_line("Highlight", style, box_text_rgb, style.highlight_rgb, border_style=3))
-    lines += ["\n", "[Events]\n", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"]
+    lines += ["\n", "[Events]\n", EVENTS_FORMAT_LINE]
     return "".join(lines)
 
 
@@ -143,10 +148,9 @@ def _word_text(style: CaptionStyle, text: str) -> str:
     return text.upper() if style.all_caps else text
 
 
-def write_ass_word_mode(words: list, ass_path: Path, video_res: tuple, style: CaptionStyle) -> int:
-    width, height = video_res
-    lines = [_ass_header(width, height, style)]
+def word_mode_dialogue_lines(words: list, style: CaptionStyle) -> tuple[list[str], int]:
     style_name = "Highlight" if style.box else "Default"
+    lines = []
     count = 0
     for word in words:
         text = _word_text(style, word.text)
@@ -156,16 +160,21 @@ def write_ass_word_mode(words: list, ass_path: Path, video_res: tuple, style: Ca
         start = format_ass_timestamp(word.start)
         end = format_ass_timestamp(word.end)
         lines.append(f"Dialogue: 0,{start},{end},{style_name},,0,0,0,,{_escape_ass_text(text)}\n")
-    ass_path.write_text("".join(lines), encoding="utf-8")
+    return lines, count
+
+
+def write_ass_word_mode(words: list, ass_path: Path, video_res: tuple, style: CaptionStyle) -> int:
+    width, height = video_res
+    lines, count = word_mode_dialogue_lines(words, style)
+    ass_path.write_text(_ass_header(width, height, style) + "".join(lines), encoding="utf-8")
     return count
 
 
-def write_ass_highlight_mode(words: list, ass_path: Path, video_res: tuple, style: CaptionStyle, max_words: int) -> int:
-    width, height = video_res
-    lines = [_ass_header(width, height, style)]
+def highlight_mode_dialogue_lines(words: list, style: CaptionStyle, max_words: int) -> tuple[list[str], int]:
     primary_tag = _ass_override_color(style.text_rgb)
     highlight_tag = _ass_override_color(style.highlight_rgb)
 
+    lines = []
     count = 0
     for group in chunk_words(words, max_words):
         group = [w for w in group if w.text.strip()]
@@ -195,5 +204,11 @@ def write_ass_highlight_mode(words: list, ass_path: Path, video_res: tuple, styl
             text = " ".join(parts)
             count += 1
             lines.append(f"Dialogue: 0,{format_ass_timestamp(start)},{format_ass_timestamp(end)},Default,,0,0,0,,{text}\n")
-    ass_path.write_text("".join(lines), encoding="utf-8")
+    return lines, count
+
+
+def write_ass_highlight_mode(words: list, ass_path: Path, video_res: tuple, style: CaptionStyle, max_words: int) -> int:
+    width, height = video_res
+    lines, count = highlight_mode_dialogue_lines(words, style, max_words)
+    ass_path.write_text(_ass_header(width, height, style) + "".join(lines), encoding="utf-8")
     return count
