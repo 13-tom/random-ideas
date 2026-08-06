@@ -112,8 +112,10 @@ def main():
     if args.llm_base_url:
         provider_kwargs["base_url"] = args.llm_base_url
 
+    used_model = None
     try:
         provider = get_provider(args.provider, **provider_kwargs)
+        used_model = getattr(provider, "model", None)
         raw_candidates = provider.score_candidates(chunks, config)
         if not raw_candidates:
             raise ValueError("provider returned no candidates")
@@ -132,7 +134,7 @@ def main():
         print(f"  {c.label}: {c.start:.1f}s -> {c.end:.1f}s  ({scored})")
     write_csv(candidates, args.output)
     if args.metadata_json:
-        write_metadata_json(candidates, args.metadata_json)
+        write_metadata_json(candidates, args.metadata_json, llm_model=used_model)
         print(f"  (metadata also written to {args.metadata_json})")
 
     print(f"\nDone. Run this next:\n  python run_pipeline.py {args.input} {args.output} -o output --aspect vertical --track-faces --caption-style highlight")
