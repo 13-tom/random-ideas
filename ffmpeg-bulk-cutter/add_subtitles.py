@@ -266,10 +266,13 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
 
 
 GROQ_HINGLISH_PROMPT = (
-    "Transcript is Hinglish: Hindi and English mixed together, written entirely "
-    "in Roman/English script, never Devanagari. Do not translate the Hindi "
-    "words into English - spell them out phonetically as spoken. Example: "
-    "mujhe office jana hai lekin traffic bahut zyada hai, main kal aaunga."
+    "Transcript is Hinglish: Hindi and English words mixed together in the same "
+    "sentences, written entirely in Roman/English script, never Devanagari. "
+    "Hindi words: spell them out phonetically as spoken, do not translate them "
+    "into English. English words: keep their normal, correct, standard English "
+    "spelling exactly as usual - do not spell them phonetically or simplify "
+    "them. Example: mujhe office jana hai lekin traffic bahut zyada hai, main "
+    "kal presentation aur meditation technique ke baare mein baat karunga."
 )
 
 
