@@ -113,3 +113,17 @@ def write_csv(candidates: list[ClipCandidate], csv_path: Path):
         writer = csv.writer(f)
         for c in candidates:
             writer.writerow([format_timestamp(c.start), format_timestamp(c.end), c.label])
+
+
+def write_metadata_json(candidates: list[ClipCandidate], json_path: Path):
+    """Optional sidecar next to the CSV: cut_clips.py/run_pipeline.py only
+    ever read the CSV (label/start/end), but a caller that wants the score/
+    title/reason too (e.g. the website's results page) can read this
+    instead of re-deriving it - keeps the CSV's format exactly what the
+    existing pipeline already expects, with nothing added to it."""
+    import json
+
+    json_path.write_text(json.dumps([
+        {"label": c.label, "start": c.start, "end": c.end, "score": c.score, "title": c.title, "reason": c.reason}
+        for c in candidates
+    ], indent=2), encoding="utf-8")

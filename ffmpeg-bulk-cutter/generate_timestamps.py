@@ -35,7 +35,7 @@ from pathlib import Path
 
 import add_subtitles
 import gpu_utils
-from clip_postprocess import fallback_candidates, resolve_and_postprocess, write_csv
+from clip_postprocess import fallback_candidates, resolve_and_postprocess, write_csv, write_metadata_json
 from clip_scoring import ScoringConfig, get_provider
 from ffmpeg_utils import get_media_duration
 from transcript_chunking import chunk_transcript
@@ -64,6 +64,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("input", type=Path, help="Raw source video")
     parser.add_argument("-o", "--output", type=Path, default=Path("timestamps.csv"), help="Where to write the timestamps CSV (default: ./timestamps.csv)")
+    parser.add_argument("--metadata-json", type=Path, default=None, help="Optional: also write score/title/reason per clip as JSON (the CSV alone only has start,end,label - see clip_postprocess.write_metadata_json)")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="Transcription language (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size (default: small). Ignored for --language hinglish.")
     parser.add_argument("--min-duration", type=float, default=20.0, help="Minimum clip length in seconds (default: 20)")
@@ -130,6 +131,9 @@ def main():
         scored = f"score={c.score:.0f}" if c.score else "unscored (fallback)"
         print(f"  {c.label}: {c.start:.1f}s -> {c.end:.1f}s  ({scored})")
     write_csv(candidates, args.output)
+    if args.metadata_json:
+        write_metadata_json(candidates, args.metadata_json)
+        print(f"  (metadata also written to {args.metadata_json})")
 
     print(f"\nDone. Run this next:\n  python run_pipeline.py {args.input} {args.output} -o output --aspect vertical --track-faces --caption-style highlight")
 
