@@ -19,3 +19,8 @@ transformers
 # CPU-only, no torch needed - detection runs fine without a GPU.
 opencv-python-headless
 mediapipe
+
+# Only needed for --language hinglish --groq (paid Groq API instead of the
+# free local model) - lets you skip torch/transformers entirely if you only
+# ever use --groq for Hinglish.
+requests

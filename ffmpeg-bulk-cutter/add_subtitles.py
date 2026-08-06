@@ -8,6 +8,7 @@ Usage:
     python add_subtitles.py clips/ -o subbed --burn
     python add_subtitles.py clips/ --language hi --model medium --burn
     python add_subtitles.py clips/ --language hinglish --burn
+    python add_subtitles.py clips/ --language hinglish --groq --groq-api-key sk-... --burn
 
 Notes on language:
     --language en       forces English transcription (faster-whisper)
@@ -17,11 +18,13 @@ Notes on language:
                         script - this is plain Whisper's normal Hindi
                         behavior, NOT Romanized "Hinglish")
     --language auto     lets faster-whisper auto-detect the language (default)
-    --language hinglish uses Oriserve/Whisper-Hindi2Hinglish-Swift, a model
-                        fine-tuned to output Hindi+English code-switched
-                        speech fully in Roman script (true "Hinglish" text).
-                        Requires torch + transformers (see requirements.txt).
-                        --model is ignored in this mode.
+    --language hinglish uses Oriserve/Whisper-Hindi2Hinglish-Swift by default
+                        (free, runs locally, needs torch + transformers -
+                        see requirements.txt), a model fine-tuned to output
+                        Hindi+English code-switched speech fully in Roman
+                        script (true "Hinglish" text). Add --groq to use
+                        Groq's paid hosted API instead - see --groq --help
+                        below. --model is ignored in this mode either way.
 """
 import argparse
 import os
@@ -37,6 +40,8 @@ from ffmpeg_utils import get_media_duration, get_video_resolution
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 HINGLISH_MODEL_ID = "Oriserve/Whisper-Hindi2Hinglish-Swift"
+GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+DEFAULT_GROQ_MODEL = "whisper-large-v3-turbo"
 
 
 def load_whisper_model(model_size: str, use_gpu: bool):
@@ -260,6 +265,65 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
     return words
 
 
+def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timestamps: bool) -> dict:
+    """Paid alternative to the free local Hinglish model: sends the clip's
+    audio to Groq's hosted Whisper API (needs internet + an API key from
+    https://console.groq.com/keys - Groq has a free tier too, but this is
+    the "pay for it" option since it's not running on your own hardware).
+    Uses the same "force language=en" trick as the local model to nudge
+    Hindi+English speech into Roman-script output - Groq's checkpoint isn't
+    fine-tuned for this the way the local Oriserve model is, so treat
+    output quality as unverified until you've tried it on your own clips.
+    Real per-word timestamps come back directly from the API (better than
+    the free path's proportional-interpolation guess).
+    """
+    import requests
+
+    wav_path = _extract_wav(video_path)
+    try:
+        data = {"model": model, "language": "en", "response_format": "verbose_json"}
+        if word_timestamps:
+            data["timestamp_granularities[]"] = "word"
+        with wav_path.open("rb") as f:
+            response = requests.post(
+                GROQ_TRANSCRIPTION_URL,
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (wav_path.name, f, "audio/wav")},
+                data=data,
+                timeout=180,
+            )
+    finally:
+        wav_path.unlink(missing_ok=True)
+    if response.status_code != 200:
+        raise RuntimeError(f"Groq API error {response.status_code}: {response.text[:500]}")
+    return response.json()
+
+
+def get_words_hinglish_groq(video_path: Path, api_key: str, model: str = DEFAULT_GROQ_MODEL) -> list[Word]:
+    result = _groq_transcribe(video_path, api_key, model, word_timestamps=True)
+    silences = _detect_silences(video_path)
+    words = []
+    for w in result.get("words", []):
+        text = w.get("word", "").strip()
+        start, end = w.get("start"), w.get("end")
+        if text and start is not None and end is not None and not _in_silence(start, end, silences):
+            words.append(Word(start, end, text))
+    return words
+
+
+def transcribe_to_srt_hinglish_groq(video_path: Path, srt_path: Path, api_key: str, model: str = DEFAULT_GROQ_MODEL):
+    result = _groq_transcribe(video_path, api_key, model, word_timestamps=False)
+    silences = _detect_silences(video_path)
+    entries = []
+    for seg in result.get("segments", []):
+        start, end, text = seg.get("start"), seg.get("end"), seg.get("text", "")
+        if start is None or end is None or _in_silence(start, end, silences):
+            continue
+        entries.append((start, end, text))
+    count = write_srt(srt_path, entries)
+    return count, "hinglish-groq"
+
+
 def _escape_subtitles_path(srt_path: Path) -> str:
     # ffmpeg's -vf filtergraph parser treats ':' as an option separator and
     # '\' as its own escape character, so a doubled-backslash escape gets
@@ -288,18 +352,26 @@ def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu:
 
 def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, caption_style: str,
                    language, model=None, pipe=None, style: CaptionStyle = None,
-                   max_words: int, burn: bool, use_gpu_encode: bool):
+                   max_words: int, burn: bool, use_gpu_encode: bool,
+                   groq_api_key: str = None, groq_model: str = DEFAULT_GROQ_MODEL):
     print(f"[{i}/{total}] Transcribing {video_path.name}...")
 
     if caption_style == "plain":
         caption_path = output_dir / f"{video_path.stem}.srt"
-        if pipe is not None:
+        if groq_api_key:
+            count, _ = transcribe_to_srt_hinglish_groq(video_path, caption_path, groq_api_key, groq_model)
+        elif pipe is not None:
             count, _ = transcribe_to_srt_hinglish(pipe, video_path, caption_path)
         else:
             count, detected = transcribe_to_srt(model, video_path, caption_path, language)
         print(f"    -> {caption_path} ({count} lines)")
     else:
-        words = get_words_hinglish(pipe, video_path) if pipe is not None else get_words_faster_whisper(model, video_path, language)[0]
+        if groq_api_key:
+            words = get_words_hinglish_groq(video_path, groq_api_key, groq_model)
+        elif pipe is not None:
+            words = get_words_hinglish(pipe, video_path)
+        else:
+            words = get_words_faster_whisper(model, video_path, language)[0]
         video_res = get_video_resolution(video_path)
         caption_path = output_dir / f"{video_path.stem}.ass"
         if caption_style == "word":
@@ -338,6 +410,9 @@ def main():
     parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--groq", action="store_true", help="Only relevant with --language hinglish: use Groq's paid hosted Whisper API instead of the free local model. Faster, no local torch/transformers install needed, and gives real per-word timestamps - but costs money and needs internet + an API key.")
+    parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
+    parser.add_argument("--groq-model", default=DEFAULT_GROQ_MODEL, help=f"Groq Whisper model to use (default: {DEFAULT_GROQ_MODEL})")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -376,14 +451,27 @@ def main():
     )
 
     if args.language == "hinglish":
-        try:
-            from transformers import pipeline  # noqa: F401
-        except ImportError:
-            sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
+        pipe = None
+        groq_api_key = None
+        if args.groq:
+            groq_api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY")
+            if not groq_api_key:
+                sys.exit("--groq requires an API key: pass --groq-api-key or set the GROQ_API_KEY environment variable. Get one at https://console.groq.com/keys")
+            try:
+                import requests  # noqa: F401
+            except ImportError:
+                sys.exit("requests is not installed. Run: pip install requests")
+            print(f"Using Groq API ({args.groq_model}) for Hinglish transcription (paid)")
+        else:
+            try:
+                from transformers import pipeline  # noqa: F401
+            except ImportError:
+                sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
+            pipe = load_hinglish_pipeline(use_gpu_whisper)
 
-        pipe = load_hinglish_pipeline(use_gpu_whisper)
         for i, video_path in enumerate(videos, start=1):
-            process_video(video_path, args.output_dir, i, len(videos), language=None, pipe=pipe, **common_kwargs)
+            process_video(video_path, args.output_dir, i, len(videos), language=None, pipe=pipe,
+                           groq_api_key=groq_api_key, groq_model=args.groq_model, **common_kwargs)
     else:
         try:
             from faster_whisper import WhisperModel  # noqa: F401

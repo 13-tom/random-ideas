@@ -31,6 +31,7 @@ Usage:
     python template_compose.py clip.mp4 -o reel.mp4 --zoom 1.3   # optional: crop in instead of showing the full frame
 """
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -172,7 +173,8 @@ def burn_ass(video_path: Path, ass_path: Path, output_path: Path, use_gpu: bool)
 
 
 def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, args, model=None, pipe=None,
-                   caption_style: CaptionStyle, use_gpu_encode: bool):
+                   caption_style: CaptionStyle, use_gpu_encode: bool,
+                   groq_api_key: str = None, groq_model: str = None):
     print(f"[{i}/{total}] Composing {video_path.name}...")
     duration = get_media_duration(video_path)
     framed_path = output_dir / f"{video_path.stem}_framed.mp4"
@@ -181,7 +183,10 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, arg
     caption_words = []
     if not args.no_captions:
         print(f"    Transcribing ({args.language})...")
-        if pipe is not None:
+        if groq_api_key:
+            from add_subtitles import get_words_hinglish_groq
+            caption_words = get_words_hinglish_groq(framed_path, groq_api_key, groq_model)
+        elif pipe is not None:
             from add_subtitles import get_words_hinglish
             caption_words = get_words_hinglish(pipe, framed_path)
         else:
@@ -231,6 +236,9 @@ def main():
     parser.add_argument("--box", action="store_true", help="Highlight the active caption word with a solid colored box instead of colored text")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen caption line (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--groq", action="store_true", help="Only relevant with --language hinglish: use Groq's paid hosted Whisper API instead of the free local model. See add_subtitles.py --help for details.")
+    parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
+    parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo)")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -262,15 +270,23 @@ def main():
     use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
 
-    model = pipe = None
+    model = pipe = groq_api_key = None
+    groq_model = args.groq_model
     if not args.no_captions:
         if args.language == "hinglish":
-            try:
-                from transformers import pipeline  # noqa: F401
-            except ImportError:
-                sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
-            from add_subtitles import load_hinglish_pipeline
-            pipe = load_hinglish_pipeline(use_gpu_whisper)
+            import add_subtitles
+            groq_model = args.groq_model or add_subtitles.DEFAULT_GROQ_MODEL
+            if args.groq:
+                groq_api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY")
+                if not groq_api_key:
+                    sys.exit("--groq requires an API key: pass --groq-api-key or set the GROQ_API_KEY environment variable. Get one at https://console.groq.com/keys")
+                print(f"Using Groq API ({groq_model}) for Hinglish transcription (paid)")
+            else:
+                try:
+                    from transformers import pipeline  # noqa: F401
+                except ImportError:
+                    sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
+                pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper)
         else:
             try:
                 from faster_whisper import WhisperModel  # noqa: F401
@@ -285,6 +301,7 @@ def main():
             process_video(
                 video_path, args.output_dir, i, len(videos), args=args, model=model, pipe=pipe,
                 caption_style=caption_style, use_gpu_encode=use_gpu_encode,
+                groq_api_key=groq_api_key, groq_model=groq_model,
             )
         except Exception as e:
             print(f"    FAILED: {video_path.name}: {e}")

@@ -74,6 +74,22 @@ python add_subtitles.py clips -o subtitled --burn
   transformers (`pip install -r requirements.txt` pulls the CPU build of
   torch, a few hundred MB). `--model` is ignored in this mode — it's a fixed,
   small (Whisper-base-sized, ~73M params) model, so it's still CPU-friendly.
+  This is the **free** option, and the default.
+- `--language hinglish --groq` switches to **Groq's paid hosted Whisper
+  API** instead of running the model locally - no torch/transformers
+  needed at all in this mode, real per-word timestamps come back directly
+  from the API (more accurate than the free path's proportional-timing
+  guess), and it's typically much faster since it's not running on your
+  own CPU. Needs an API key from [console.groq.com/keys](https://console.groq.com/keys)
+  (has its own free tier, but this flag is for when you want the paid/
+  faster option). Pass it with `--groq-api-key sk-...` or set a
+  `GROQ_API_KEY` environment variable so you don't have to pass it every
+  time. `--groq-model` picks the Groq-hosted model (default:
+  `whisper-large-v3-turbo`). One caveat: Groq's checkpoint isn't
+  fine-tuned for Hinglish transliteration the way the local Oriserve model
+  is - it uses the same "force English decoding" trick, but output quality
+  on Hindi+English speech is unverified until you've tried it on your own
+  clips.
 - `--model` controls accuracy vs. speed for `en`/`hi`/`auto` modes:
   `tiny`/`base` are fastest, `small` (default) is the best balance on CPU,
   `medium`/`large-v3` are slower on CPU but more accurate. If you have an

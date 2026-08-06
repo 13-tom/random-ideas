@@ -16,6 +16,7 @@ detected, falling back to CPU otherwise (see gpu_utils.py). Use --no-gpu to
 force CPU.
 """
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -54,6 +55,9 @@ def main():
     parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--groq", action="store_true", help="Only relevant with --language hinglish: use Groq's paid hosted Whisper API instead of the free local model. See add_subtitles.py --help for details.")
+    parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
+    parser.add_argument("--groq-model", default=add_subtitles.DEFAULT_GROQ_MODEL, help=f"Groq Whisper model to use (default: {add_subtitles.DEFAULT_GROQ_MODEL})")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -131,9 +135,18 @@ def main():
         burn=True, use_gpu_encode=use_gpu_encode,
     )
     if args.language == "hinglish":
-        pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper)
+        pipe = None
+        groq_api_key = None
+        if args.groq:
+            groq_api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY")
+            if not groq_api_key:
+                sys.exit("--groq requires an API key: pass --groq-api-key or set the GROQ_API_KEY environment variable. Get one at https://console.groq.com/keys")
+            print(f"Using Groq API ({args.groq_model}) for Hinglish transcription (paid)")
+        else:
+            pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper)
         for i, clip_path in enumerate(clip_paths, start=1):
-            add_subtitles.process_video(clip_path, captioned_dir, i, len(clip_paths), language=None, pipe=pipe, **common_kwargs)
+            add_subtitles.process_video(clip_path, captioned_dir, i, len(clip_paths), language=None, pipe=pipe,
+                                         groq_api_key=groq_api_key, groq_model=args.groq_model, **common_kwargs)
     else:
         model = add_subtitles.load_whisper_model(args.model, use_gpu_whisper)
         language = None if args.language == "auto" else args.language
