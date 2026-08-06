@@ -279,6 +279,14 @@ def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timesta
     """
     import requests
 
+    # Defends against a very easy copy-paste mistake: pasting extra text or
+    # line breaks along with the key (e.g. into a $env:GROQ_API_KEY= value)
+    # produces a key with embedded whitespace, which requests then rejects
+    # outright with an opaque "Invalid leading whitespace... in header
+    # value" error. A real Groq key is one unbroken token, so take just the
+    # first whitespace-delimited chunk of whatever was passed in.
+    api_key = api_key.strip().split()[0] if api_key and api_key.strip() else api_key
+
     wav_path = _extract_wav(video_path)
     try:
         data = {"model": model, "language": "en", "response_format": "verbose_json"}
