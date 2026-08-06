@@ -12,7 +12,7 @@ export function ClipCard({ clip }: { clip: Clip }) {
       <div className="relative aspect-[9/16] bg-ink-900">
         <video
           src={clip.preview_url}
-          poster={clip.thumbnail_url}
+          poster={clip.thumbnail_url ?? undefined}
           controls
           preload="metadata"
           className="h-full w-full object-cover"

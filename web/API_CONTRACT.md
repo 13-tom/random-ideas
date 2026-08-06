@@ -60,7 +60,7 @@ Response:
       "duration": number,
       "download_url": "string",
       "preview_url": "string",
-      "thumbnail_url": "string"
+      "thumbnail_url": "string|null"
     }
   ]
 }

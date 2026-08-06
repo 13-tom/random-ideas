@@ -83,7 +83,7 @@ export interface Clip {
   duration: number;
   download_url: string;
   preview_url: string;
-  thumbnail_url: string;
+  thumbnail_url: string | null;
 }
 
 export interface ListClipsResponse {
