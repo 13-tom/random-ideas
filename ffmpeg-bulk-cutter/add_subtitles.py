@@ -265,17 +265,31 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
     return words
 
 
-def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timestamps: bool) -> dict:
+GROQ_HINGLISH_PROMPT = (
+    "Transcript is Hinglish: Hindi and English mixed together, written entirely "
+    "in Roman/English script, never Devanagari. Do not translate the Hindi "
+    "words into English - spell them out phonetically as spoken. Example: "
+    "mujhe office jana hai lekin traffic bahut zyada hai, main kal aaunga."
+)
+
+
+def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timestamps: bool, prompt: str = GROQ_HINGLISH_PROMPT) -> dict:
     """Paid alternative to the free local Hinglish model: sends the clip's
     audio to Groq's hosted Whisper API (needs internet + an API key from
     https://console.groq.com/keys - Groq has a free tier too, but this is
     the "pay for it" option since it's not running on your own hardware).
     Uses the same "force language=en" trick as the local model to nudge
-    Hindi+English speech into Roman-script output - Groq's checkpoint isn't
-    fine-tuned for this the way the local Oriserve model is, so treat
-    output quality as unverified until you've tried it on your own clips.
+    Hindi+English speech into Roman-script output, plus a prompt (Whisper's
+    API supports biasing transcription style/vocabulary this way) asking
+    for phonetic transliteration instead of translation. Groq's checkpoint
+    isn't fine-tuned for this the way the local Oriserve model is, though -
+    confirmed empirically that on genuinely code-switched speech it can
+    still default to translating the Hindi portions into English rather
+    than transliterating them, prompt or not. Treat output quality as
+    unverified until you've tried it on your own clips; the free local
+    model is the more reliable option for real Hinglish transliteration.
     Real per-word timestamps come back directly from the API (better than
-    the free path's proportional-interpolation guess).
+    the free path's proportional-interpolation guess) when it does work.
     """
     import requests
 
@@ -292,6 +306,8 @@ def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timesta
         data = {"model": model, "language": "en", "response_format": "verbose_json"}
         if word_timestamps:
             data["timestamp_granularities[]"] = "word"
+        if prompt:
+            data["prompt"] = prompt
         with wav_path.open("rb") as f:
             response = requests.post(
                 GROQ_TRANSCRIPTION_URL,

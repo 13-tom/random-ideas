@@ -85,11 +85,16 @@ python add_subtitles.py clips -o subtitled --burn
   faster option). Pass it with `--groq-api-key sk-...` or set a
   `GROQ_API_KEY` environment variable so you don't have to pass it every
   time. `--groq-model` picks the Groq-hosted model (default:
-  `whisper-large-v3-turbo`). One caveat: Groq's checkpoint isn't
-  fine-tuned for Hinglish transliteration the way the local Oriserve model
-  is - it uses the same "force English decoding" trick, but output quality
-  on Hindi+English speech is unverified until you've tried it on your own
-  clips.
+  `whisper-large-v3-turbo`). **Known limitation, confirmed in testing:**
+  Groq's checkpoint isn't fine-tuned for Hinglish transliteration the way
+  the local Oriserve model is. It uses the same "force English decoding"
+  trick plus a style-biasing prompt asking for phonetic transliteration,
+  which works reasonably on clearly Hindi speech, but on genuinely
+  code-switched Hindi+English speech it can still default to *translating*
+  the Hindi portions into English instead of transliterating them - so you
+  may get a fully English transcript instead of Hinglish. If that happens,
+  the free local model (no `--groq`) is the more reliable option for true
+  Hinglish output.
 - `--model` controls accuracy vs. speed for `en`/`hi`/`auto` modes:
   `tiny`/`base` are fastest, `small` (default) is the best balance on CPU,
   `medium`/`large-v3` are slower on CPU but more accurate. If you have an
