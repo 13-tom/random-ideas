@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-100 antialiased;
+    font-feature-settings: "ss01" 1;
+  }
+
+  ::selection {
+    @apply bg-signal-500/30 text-white;
+  }
+
+  /* Visible focus rings everywhere; never remove them, only restyle. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-signal-500 ring-offset-2 ring-offset-ink-950;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3
+      text-sm font-semibold transition-all duration-200 ease-out
+      disabled:cursor-not-allowed disabled:opacity-50;
+    min-height: 44px;
+  }
+
+  .btn-primary {
+    @apply btn bg-signal-500 text-ink-950 shadow-glow
+      hover:bg-signal-400 active:bg-signal-600;
+  }
+
+  .btn-secondary {
+    @apply btn bg-ink-800 text-ink-50 ring-1 ring-inset ring-ink-600
+      hover:bg-ink-700 hover:ring-ink-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-200 hover:bg-ink-800/70 hover:text-ink-50;
+  }
+
+  .card {
+    @apply rounded-2xl border border-ink-700/80 bg-ink-850/80 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset];
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-ink-200;
+  }
+
+  .field-input {
+    @apply w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-2.5 text-[15px]
+      text-ink-50 placeholder:text-ink-400 transition-colors
+      focus:border-signal-500 focus:outline-none;
+    min-height: 44px;
+  }
+
+  .field-select {
+    @apply field-input appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%239298a6'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 1.15rem;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden bg-ink-800;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06),
+      transparent
+    );
+    background-size: 200% 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
