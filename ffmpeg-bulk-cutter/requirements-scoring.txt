@@ -1,0 +1,5 @@
+# Extra dependency for generate_timestamps.py's LLM-based clip scoring,
+# on top of the base pipeline's requirements.txt (which stays untouched so
+# existing users of the CLI tool who don't need auto-timestamps aren't
+# forced to install this).
+requests

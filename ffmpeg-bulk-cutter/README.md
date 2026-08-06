@@ -379,6 +379,53 @@ ratio (`force_original_aspect_ratio=decrease`), so anything landscape-ish
 works. Audio comes from the source clip, GPU/CPU encoding falls back
 automatically the same way every other script here does.
 
+## Auto-generating timestamps with AI (`generate_timestamps.py`)
+
+Every command above needs a `timestamps.csv` you write by hand. This script
+generates one automatically: it transcribes the video, asks an LLM to pick
+the most clip-worthy moments, and writes a CSV in the exact format
+`cut_clips.py`/`run_pipeline.py` already read - so it's a drop-in step
+*before* everything above, not a replacement for any of it.
+
+```
+python generate_timestamps.py raw_video.mp4 -o timestamps.csv
+python run_pipeline.py raw_video.mp4 timestamps.csv -o output --aspect vertical --track-faces --caption-style highlight
+```
+
+Install the extra dependency first: `pip install -r requirements-scoring.txt`.
+
+- `--provider openrouter` (default) — calls a cheap LLM via
+  [OpenRouter](https://openrouter.ai) (default model: Gemini 2.5 Flash).
+  Needs an API key: `--llm-api-key` or the `OPENROUTER_API_KEY` env var.
+  Override the model with `--llm-model`, e.g.
+  `--llm-model deepseek/deepseek-chat`.
+- `--provider local` — calls a local OpenAI-compatible server instead (e.g.
+  [Ollama](https://ollama.com) running on another machine reachable over
+  Tailscale) for free prompt iteration during development. No API key
+  needed. Point it elsewhere with `--llm-base-url` (or the
+  `LOCAL_LLM_BASE_URL` env var) and `--llm-model`.
+- `--min-duration` / `--max-duration` — target clip length in seconds
+  (default 20-90).
+- `--max-clips` — how many clips to output at most (default 10).
+- `--min-score` — drop candidates the LLM scored below this, 0-100 scale
+  (default 0, i.e. keep everything that survives length/overlap filtering).
+- `--language` — same `en`/`hi`/`auto`/`hinglish` choices as
+  `add_subtitles.py`.
+
+If the LLM call fails outright (no API key, provider outage, an
+unparseable response even after one automatic repair retry), it falls back
+to evenly-spaced, unscored clips instead of failing the whole run - you
+still get a usable `timestamps.csv`, just without AI ranking.
+
+**How the scoring itself works, and how to swap models/providers:**
+`clip_scoring.py` defines the provider interface
+(`ClipScoringProvider.score_candidates`) that `clip_scoring_openrouter.py`
+and `clip_scoring_local.py` both implement - swapping the LLM behind
+`generate_timestamps.py` is a `--provider`/`--llm-model` flag, not a code
+change. `clip_scoring_prompt.py` holds the actual scoring rubric (hook
+strength, self-contained thought, target length, etc.) sent to the model -
+that prompt is the part worth iterating on for better picks.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, reframing, and subtitling together — raw
