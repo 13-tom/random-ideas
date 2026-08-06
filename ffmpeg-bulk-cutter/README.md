@@ -97,6 +97,18 @@ python add_subtitles.py clips -o subtitled --burn
   occasionally still come out garbled. If output quality matters more than
   speed, the free local model (no `--groq`) remains the more reliable
   option.
+
+  If Groq is the only backend you ever use, `add_subtitles_groq.py` is a
+  dedicated, simpler version of this same tool with no `--language`/`--groq`
+  flags to remember - it's always Groq, always Hinglish:
+  ```
+  python add_subtitles_groq.py clips -o subtitled --burn --caption-style highlight
+  ```
+  Same styling flags as `add_subtitles.py` (`--font`, `--highlight-color`,
+  `--box`, etc.), same `--groq-api-key`/`GROQ_API_KEY` behavior. It shares
+  its Groq-calling code with `add_subtitles.py --groq` under the hood (one
+  implementation, two entry points), so fixes and prompt tuning apply to
+  both automatically.
 - `--model` controls accuracy vs. speed for `en`/`hi`/`auto` modes:
   `tiny`/`base` are fastest, `small` (default) is the best balance on CPU,
   `medium`/`large-v3` are slower on CPU but more accurate. If you have an

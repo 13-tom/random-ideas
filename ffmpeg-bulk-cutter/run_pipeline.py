@@ -57,7 +57,7 @@ def main():
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     parser.add_argument("--groq", action="store_true", help="Only relevant with --language hinglish: use Groq's paid hosted Whisper API instead of the free local model. See add_subtitles.py --help for details.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
-    parser.add_argument("--groq-model", default=add_subtitles.DEFAULT_GROQ_MODEL, help=f"Groq Whisper model to use (default: {add_subtitles.DEFAULT_GROQ_MODEL})")
+    parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo)")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -141,6 +141,8 @@ def main():
             groq_api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY")
             if not groq_api_key:
                 sys.exit("--groq requires an API key: pass --groq-api-key or set the GROQ_API_KEY environment variable. Get one at https://console.groq.com/keys")
+            from add_subtitles_groq import DEFAULT_GROQ_MODEL
+            args.groq_model = args.groq_model or DEFAULT_GROQ_MODEL
             print(f"Using Groq API ({args.groq_model}) for Hinglish transcription (paid)")
         else:
             pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper)
