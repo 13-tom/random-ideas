@@ -1,4 +1,4 @@
-# kalakaar.io backend
+# KatGai Reel backend
 
 FastAPI service that wraps the `ffmpeg-bulk-cutter/` pipeline as a web API.
 See `../API_CONTRACT.md` for the exact request/response shapes the
@@ -14,7 +14,7 @@ pip install -r ../../ffmpeg-bulk-cutter/requirements-scoring.txt
 
 # optional: Postgres + MinIO instead of the SQLite/no-storage defaults
 docker compose -f ../docker-compose.dev.yml up -d
-export DATABASE_URL=postgresql://kalakaar:kalakaar@localhost:5432/kalakaar
+export DATABASE_URL=postgresql://katgaireel:katgaireel@localhost:5432/katgaireel
 
 uvicorn app.main:app --reload
 ```

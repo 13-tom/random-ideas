@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import internal, jobs, uploads
 from app.jobs_repo import init_db
 
-app = FastAPI(title="kalakaar.io API")
+app = FastAPI(title="KatGai Reel API")
 
 app.add_middleware(
     CORSMiddleware,

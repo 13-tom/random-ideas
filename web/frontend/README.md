@@ -1,6 +1,6 @@
-# kalakaar.io — frontend
+# KatGai Reel — frontend
 
-Next.js (App Router) + TypeScript + Tailwind CSS frontend for kalakaar.io.
+Next.js (App Router) + TypeScript + Tailwind CSS frontend for KatGai Reel.
 Talks to the FastAPI backend in `web/backend/` per `web/API_CONTRACT.md`.
 
 ## Stack

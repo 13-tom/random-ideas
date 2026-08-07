@@ -1,19 +1,19 @@
 # Local dev only: Postgres + MinIO (S3-compatible, stands in for R2).
 # The backend's defaults in app/config.py already point at these -
 # `docker compose -f web/docker-compose.dev.yml up -d`, create the MinIO
-# bucket once (`kalakaar-dev`, matching R2_BUCKET_NAME), then run the
+# bucket once (`katgaireel-dev`, matching R2_BUCKET_NAME), then run the
 # backend locally against it.
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: kalakaar
-      POSTGRES_PASSWORD: kalakaar
-      POSTGRES_DB: kalakaar
+      POSTGRES_USER: katgaireel
+      POSTGRES_PASSWORD: katgaireel
+      POSTGRES_DB: katgaireel
     ports:
       - "5432:5432"
     volumes:
-      - kalakaar_postgres_data:/var/lib/postgresql/data
+      - katgaireel_postgres_data:/var/lib/postgresql/data
 
   minio:
     image: minio/minio
@@ -25,8 +25,8 @@ services:
       - "9000:9000"
       - "9001:9001"  # web console
     volumes:
-      - kalakaar_minio_data:/data
+      - katgaireel_minio_data:/data
 
 volumes:
-  kalakaar_postgres_data:
-  kalakaar_minio_data:
+  katgaireel_postgres_data:
+  katgaireel_minio_data:

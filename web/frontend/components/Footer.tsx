@@ -25,7 +25,7 @@ export function Footer() {
       </div>
       <div className="border-t border-ink-800/80 py-5">
         <p className="container-page text-xs text-ink-500">
-          &copy; {new Date().getFullYear()} kalakaar.io. All rights reserved.
+          &copy; {new Date().getFullYear()} KatGai Reel. All rights reserved.
         </p>
       </div>
     </footer>

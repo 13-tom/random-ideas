@@ -43,7 +43,7 @@ def run_job(job_id: str):
         print(f"[pipeline_runner] job {job_id} not found, skipping")
         return
 
-    workdir = Path(tempfile.mkdtemp(prefix=f"kalakaar_job_{job_id}_"))
+    workdir = Path(tempfile.mkdtemp(prefix=f"katgaireel_job_{job_id}_"))
     try:
         _run(job_id, job, workdir)
     except Exception as e:

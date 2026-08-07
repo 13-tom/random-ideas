@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    database_url: str = "sqlite:///./kalakaar.db"
+    database_url: str = "sqlite:///./katgaireel.db"
 
     # Supabase auth. New projects sign session JWTs asymmetrically (ES256)
     # by default - verified via supabase_url's JWKS endpoint, no secret
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     r2_endpoint_url: str = "http://localhost:9000"  # MinIO for local dev
     r2_access_key_id: str = "minioadmin"
     r2_secret_access_key: str = "minioadmin"
-    r2_bucket_name: str = "kalakaar-dev"
+    r2_bucket_name: str = "katgaireel-dev"
     presigned_url_expiry_seconds: int = 3600
     presigned_download_expiry_seconds: int = 900
 

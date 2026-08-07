@@ -1,4 +1,4 @@
-# kalakaar.io API contract (backend <-> frontend)
+# KatGai Reel API contract (backend <-> frontend)
 
 Auth: Supabase magic-link, handled entirely client-side in the Next.js app
 (`@supabase/supabase-js`). The frontend sends the Supabase session's JWT as

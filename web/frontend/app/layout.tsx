@@ -6,18 +6,19 @@ import { Footer } from "@/components/Footer";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kalakaar.io"),
+  // TODO: swap for the real domain once registered.
+  metadataBase: new URL("https://katgaireel.io"),
   title: {
-    default: "kalakaar.io — AI clips from your long videos",
-    template: "%s · kalakaar.io",
+    default: "KatGai Reel — AI clips from your long videos",
+    template: "%s · KatGai Reel",
   },
   description:
-    "Upload a long video and kalakaar.io finds the best moments, reframes them for vertical/square, and burns in styled captions — automatically.",
+    "Upload a long video and KatGai Reel finds the best moments, reframes them for vertical/square, and burns in styled captions — automatically.",
   openGraph: {
-    title: "kalakaar.io — AI clips from your long videos",
+    title: "KatGai Reel — AI clips from your long videos",
     description:
       "Upload once. Get a feed of ready-to-post short clips, reframed and captioned automatically.",
-    siteName: "kalakaar.io",
+    siteName: "KatGai Reel",
     type: "website",
   },
 };

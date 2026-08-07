@@ -58,7 +58,7 @@ function LoginForm() {
     <div className="container-page flex min-h-[calc(100vh-4rem-14rem)] items-center py-16">
       <div className="mx-auto w-full max-w-md">
         <h1 className="font-display text-3xl font-bold tracking-tight text-ink-50">
-          Sign in to kalakaar.io
+          Sign in to KatGai Reel
         </h1>
         <p className="mt-2 text-[15px] text-ink-300">
           We&apos;ll email you a magic link — no password to remember.
@@ -127,7 +127,7 @@ function LoginForm() {
         )}
 
         <p className="mt-8 text-sm text-ink-500">
-          By continuing you agree this is a demo/MVP build of kalakaar.io.{" "}
+          By continuing you agree this is a demo/MVP build of KatGai Reel.{" "}
           <Link href="/" className="text-ink-300 underline underline-offset-2 hover:text-ink-100">
             Back to home
           </Link>

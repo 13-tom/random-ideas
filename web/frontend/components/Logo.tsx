@@ -14,7 +14,7 @@ export function Logo({ className = "" }: { className?: string }) {
           />
         </svg>
       </span>
-      kalakaar<span className="text-signal-500">.io</span>
+      KatGai<span className="text-signal-500"> Reel</span>
     </span>
   );
 }

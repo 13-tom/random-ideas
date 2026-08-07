@@ -1,6 +1,6 @@
 # Build from the REPO ROOT, not this directory, so this can also COPY
 # ffmpeg-bulk-cutter/ - e.g.:
-#   docker build -f web/backend/Dockerfile -t kalakaar-backend .
+#   docker build -f web/backend/Dockerfile -t katgaireel-backend .
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Thin typed client for the kalakaar.io backend, matching web/API_CONTRACT.md
+ * Thin typed client for the KatGai Reel backend, matching web/API_CONTRACT.md
  * exactly. No business logic lives here — callers get raw contract shapes
  * back and decide what to do with them.
  */

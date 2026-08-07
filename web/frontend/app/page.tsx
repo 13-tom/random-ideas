@@ -16,7 +16,7 @@ const FEATURES = [
   {
     icon: IconWand,
     title: "Finds the best moments",
-    body: "kalakaar.io watches and transcribes the full video, then scores every moment for hook strength and pacing — so you skip the scrubbing.",
+    body: "KatGai Reel watches and transcribes the full video, then scores every moment for hook strength and pacing — so you skip the scrubbing.",
   },
   {
     icon: IconCrop,
@@ -145,7 +145,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-300">
-              Upload one long video. kalakaar.io transcribes it, finds the
+              Upload one long video. KatGai Reel transcribes it, finds the
               moments worth clipping, reframes them for vertical or square,
               and burns in styled captions — so you get a stack of
               ready-to-post shorts back, not homework.
@@ -341,7 +341,7 @@ export default function LandingPage() {
                 Stop scrubbing your own footage for clips
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-lg text-ink-300">
-                Upload a video and let kalakaar.io hand you back the moments
+                Upload a video and let KatGai Reel hand you back the moments
                 worth posting.
               </p>
               <Link href="/login" className="btn-primary mt-8 inline-flex text-base">
