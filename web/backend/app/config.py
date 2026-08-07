@@ -14,9 +14,14 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./kalakaar.db"
 
-    # Supabase auth - JWTs are HS256-signed with this project secret
-    # (Project Settings -> API -> JWT Secret in the Supabase dashboard).
-    supabase_jwt_secret: str = "dev-secret-change-me"
+    # Supabase auth. New projects sign session JWTs asymmetrically (ES256)
+    # by default - verified via supabase_url's JWKS endpoint, no secret
+    # needed. supabase_jwt_secret is only used as a fallback for tokens
+    # that come in signed HS256 (older projects still on a static secret,
+    # or not-yet-expired tokens from before a project migrated) - see
+    # app/auth.py for how the two paths are chosen.
+    supabase_url: str = "https://project-ref.supabase.co"
+    supabase_jwt_secret: str | None = None
     supabase_jwt_audience: str = "authenticated"
 
     # R2 (S3-compatible) object storage
