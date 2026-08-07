@@ -74,7 +74,13 @@ python add_subtitles.py clips -o subtitled --burn
   transformers (`pip install -r requirements.txt` pulls the CPU build of
   torch, a few hundred MB). `--model` is ignored in this mode — it's a fixed,
   small (Whisper-base-sized, ~73M params) model, so it's still CPU-friendly.
-  This is the **free** option, and the default.
+  This is the **free** option, and the default. For clips over ~25 seconds,
+  audio is split ourselves at silence gaps and each piece transcribed
+  separately with its timestamps corrected back onto the full clip's
+  timeline - this avoids transformers' own long-audio chunking, which is
+  explicitly documented as experimental for Whisper-style models and was
+  confirmed (via a user report) to cause audio/subtitle sync to drift by
+  several seconds after a chunk boundary.
 - `--language hinglish --groq` switches to **Groq's paid hosted Whisper
   API** instead of running the model locally - no torch/transformers
   needed at all in this mode, real per-word timestamps come back directly

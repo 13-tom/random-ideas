@@ -61,21 +61,23 @@ def load_hinglish_pipeline(use_gpu: bool):
     from transformers import pipeline
     import torch
 
-    # chunk_length_s/stride_length_s: Whisper's encoder only handles ~30s of
-    # audio per pass. Without these, transformers doesn't chunk longer clips
-    # itself, and on anything past ~30s the pipeline can silently come back
-    # with an empty transcript instead of erroring - explicit chunking (with
-    # a little overlap via stride) makes clips of any length transcribe
-    # reliably, at the cost of chunk boundaries needing the overlap to stitch
-    # words back together (which the pipeline already handles internally).
+    # No chunk_length_s/stride_length_s here on purpose: that's the
+    # pipeline's own long-audio splitting, which transformers itself warns
+    # is "very experimental" for seq2seq models like Whisper - confirmed by
+    # a user report of audio/subtitle sync drifting out by several seconds
+    # after each ~25-30s chunk boundary. We handle audio longer than
+    # Whisper's ~30s native window ourselves instead (see
+    # _hinglish_pipe_chunks below), splitting at silence gaps and correcting
+    # each segment's timestamps by its own known offset - no experimental
+    # window-stitching involved, so no drift.
     if use_gpu:
         try:
-            pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=0, torch_dtype=torch.float16, chunk_length_s=30, stride_length_s=5)
+            pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=0, torch_dtype=torch.float16)
             print(f"Loaded {HINGLISH_MODEL_ID} on GPU (CUDA, float16)")
             return pipe
         except Exception as e:
             print(f"GPU load failed ({e}); falling back to CPU")
-    pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=-1, torch_dtype=torch.float32, chunk_length_s=30, stride_length_s=5)
+    pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=-1, torch_dtype=torch.float32)
     print(f"Loaded {HINGLISH_MODEL_ID} on CPU")
     return pipe
 
@@ -173,24 +175,100 @@ def _in_silence(start: float, end: float, silences: list[tuple[float, float]]) -
     return any(start >= s and end <= e for s, e in silences)
 
 
-def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
+SAFE_CHUNK_SECONDS = 25.0  # comfortably under Whisper's ~30s native single-pass window
+
+
+def _split_points(duration: float, silences: list[tuple[float, float]], target: float = SAFE_CHUNK_SECONDS) -> list[float]:
+    """Pick cut points roughly every `target` seconds, snapped to the
+    nearest detected silence gap within 4s of the target so segments break
+    between words/sentences rather than mid-word. Falls back to a hard cut
+    at the target time if no silence is nearby."""
+    if duration <= target:
+        return []
+    points = []
+    cursor = target
+    while cursor < duration:
+        best = None
+        for s, e in silences:
+            mid = (s + e) / 2
+            if abs(mid - cursor) <= 4.0 and (best is None or abs(mid - cursor) < abs(best - cursor)):
+                best = mid
+        cut = best if best is not None else cursor
+        points.append(cut)
+        cursor = cut + target
+    return points
+
+
+def _extract_wav_segment(wav_path: Path, start: float, end: float | None) -> Path:
+    fd, seg_path_str = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    seg_path = Path(seg_path_str)
+    cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(wav_path), "-ss", str(start)]
+    if end is not None:
+        cmd += ["-t", str(end - start)]
+    cmd += [str(seg_path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return seg_path
+
+
+def _hinglish_pipe_chunks(pipe, video_path: Path) -> list[dict]:
+    """Runs the local Hinglish pipeline safely on audio of any length by
+    segmenting it ourselves at silence-aligned ~25s boundaries and
+    transcribing each segment as its own single-pass (<30s) call, instead of
+    relying on transformers' pipeline-level chunk_length_s/stride_length_s
+    for seq2seq models - that mechanism is explicitly flagged "very
+    experimental" and was confirmed (user report) to cause audio/subtitle
+    sync to drift out by several seconds after crossing a chunk boundary,
+    since the experimental window-overlap stitching doesn't always offset
+    timestamps back onto the full clip's timeline correctly. Splitting and
+    offsetting ourselves, with no overlapping windows to reconcile,
+    sidesteps that failure mode entirely - each returned chunk's timestamp
+    is (this segment's own timestamp) + (this segment's known start offset
+    in the original clip), simple addition, nothing to get wrong.
+    """
     wav_path = _extract_wav(video_path)
     try:
-        result = pipe(
-            str(wav_path),
-            return_timestamps=True,
-            generate_kwargs={"task": "transcribe", "language": "en"},
-        )
+        duration = get_media_duration(video_path)
+        silences = _detect_silences(video_path)
+        cuts = _split_points(duration, silences)
+        bounds = [0.0] + cuts + [duration]
+
+        all_chunks = []
+        for seg_start, seg_end in zip(bounds, bounds[1:]):
+            if seg_end - seg_start < 0.2:
+                continue
+            seg_path = _extract_wav_segment(wav_path, seg_start, seg_end)
+            try:
+                result = pipe(
+                    str(seg_path),
+                    return_timestamps=True,
+                    generate_kwargs={"task": "transcribe", "language": "en"},
+                )
+            finally:
+                seg_path.unlink(missing_ok=True)
+            seg_chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
+            for i, chunk in enumerate(seg_chunks):
+                start, end = chunk["timestamp"]
+                start = (start or 0.0) + seg_start
+                if end is None:
+                    next_start = seg_chunks[i + 1]["timestamp"][0] if i + 1 < len(seg_chunks) else (seg_end - seg_start)
+                    end = next_start + seg_start
+                else:
+                    end = end + seg_start
+                all_chunks.append({"timestamp": (start, end), "text": chunk["text"]})
+        return all_chunks
     finally:
         wav_path.unlink(missing_ok=True)
-    chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
+
+
+def transcribe_to_srt_hinglish(pipe, video_path: Path, srt_path: Path):
+    chunks = _hinglish_pipe_chunks(pipe, video_path)
     duration = get_media_duration(video_path)
     silences = _detect_silences(video_path)
 
     entries = []
     for i, chunk in enumerate(chunks):
         start, end = chunk["timestamp"]
-        start = start or 0.0
         if end is None:
             # Whisper sometimes doesn't predict an end timestamp for the
             # final (or a cut-off) chunk; fall back to the next chunk's
@@ -227,23 +305,13 @@ def get_words_hinglish(pipe, video_path: Path) -> list[Word]:
     interpolate per-word timing proportionally by character length -
     approximate, but reads fine for on-screen captions.
     """
-    wav_path = _extract_wav(video_path)
-    try:
-        result = pipe(
-            str(wav_path),
-            return_timestamps=True,
-            generate_kwargs={"task": "transcribe", "language": "en"},
-        )
-    finally:
-        wav_path.unlink(missing_ok=True)
-    chunks = result.get("chunks") or [{"timestamp": (0.0, None), "text": result["text"]}]
+    chunks = _hinglish_pipe_chunks(pipe, video_path)
     duration = get_media_duration(video_path)
     silences = _detect_silences(video_path)
 
     words = []
     for i, chunk in enumerate(chunks):
         start, end = chunk["timestamp"]
-        start = start or 0.0
         if end is None:
             end = chunks[i + 1]["timestamp"][0] if i + 1 < len(chunks) else duration
         if _in_silence(start, end, silences):
