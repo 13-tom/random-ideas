@@ -1,0 +1,42 @@
+# Render Blueprint - lets Render deploy web/backend/Dockerfile with one
+# click ("New +" -> "Blueprint", point at this repo) instead of manually
+# configuring a Web Service. Secrets (sync: false) are NOT stored here -
+# Render prompts for them once in its dashboard and keeps them there,
+# never in this repo.
+#
+# See web/backend/README.md for what each env var needs to be, and
+# web/backend/.env for the actual working values collected during local
+# setup (gitignored - never in this file).
+services:
+  - type: web
+    name: katgaireel-backend
+    runtime: docker
+    dockerfilePath: ./web/backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        value: ""
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: CLIP_SCORING_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: QUEUE_BACKEND
+        value: local
+      - key: INTERNAL_BASE_URL
+        sync: false  # set to this service's own Render URL once known, e.g. https://katgaireel-backend.onrender.com

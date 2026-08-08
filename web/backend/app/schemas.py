@@ -3,7 +3,7 @@ the source of truth shared with the frontend."""
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Aspect = Literal["original", "vertical", "square", "portrait", "landscape"]
 CaptionStyle = Literal["plain", "word", "highlight"]
@@ -32,8 +32,18 @@ class JobOptions(BaseModel):
 
 
 class CreateJobRequest(BaseModel):
-    upload_id: str
+    # Exactly one of these two - a job either comes from a file the user
+    # uploaded (upload_id, from POST /api/uploads) or a YouTube link the
+    # backend downloads itself (youtube_url). See api/jobs.py.
+    upload_id: str | None = None
+    youtube_url: str | None = None
     options: JobOptions = JobOptions()
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self):
+        if bool(self.upload_id) == bool(self.youtube_url):
+            raise ValueError("Provide exactly one of upload_id or youtube_url")
+        return self
 
 
 class CreateJobResponse(BaseModel):

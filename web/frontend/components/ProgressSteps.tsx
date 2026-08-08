@@ -1,6 +1,7 @@
 import type { JobStatus } from "@/lib/api";
 
 const STEPS: { status: JobStatus; label: string }[] = [
+  { status: "downloading", label: "Downloading" },
   { status: "transcribing", label: "Transcribing" },
   { status: "scoring", label: "Scoring clips" },
   { status: "cutting", label: "Cutting" },

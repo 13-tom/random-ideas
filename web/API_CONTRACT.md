@@ -14,10 +14,12 @@ Frontend PUTs the raw file bytes directly to `put_url` (R2 presigned URL) -
 does not go through the backend.
 
 ## POST /api/jobs
-Request:
+Request - exactly one of `upload_id` / `youtube_url` (backend 422s if both or
+neither are set):
 ```json
 {
   "upload_id": "string",
+  "youtube_url": "string",
   "options": {
     "aspect": "original|vertical|square|portrait|landscape",
     "track_faces": boolean,
@@ -29,6 +31,9 @@ Request:
   }
 }
 ```
+For a YouTube-sourced job, the backend downloads the video itself (via
+yt-dlp, inside the background job - see `pipeline_runner.py`) - there's no
+upload step, `POST /api/jobs` is the only call needed. Public videos only.
 Response: `{ "job_id": string }`
 
 ## GET /api/jobs
@@ -39,7 +44,7 @@ Response:
 ```json
 {
   "id": "string",
-  "status": "queued|transcribing|scoring|cutting|reframing|captioning|uploading|done|failed",
+  "status": "queued|downloading|transcribing|scoring|cutting|reframing|captioning|uploading|done|failed",
   "progress_pct": number,
   "error_message": "string|null",
   "created_at": "string"

@@ -61,7 +61,9 @@ function UploadPageContent() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [sourceMode, setSourceMode] = useState<"file" | "youtube">("file");
   const [file, setFile] = useState<File | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [options, setOptions] = useState<JobOptions>(DEFAULT_OPTIONS);
 
@@ -88,10 +90,18 @@ function UploadPageContent() {
     setOptions((prev) => ({ ...prev, [key]: value }));
   }
 
+  function isLikelyYoutubeUrl(value: string): boolean {
+    return /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//i.test(value.trim());
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) {
+    if (sourceMode === "file" && !file) {
       setErrorMsg("Choose a video to upload first.");
+      return;
+    }
+    if (sourceMode === "youtube" && !isLikelyYoutubeUrl(youtubeUrl)) {
+      setErrorMsg("Paste a valid YouTube video link.");
       return;
     }
     if (options.min_duration > options.max_duration) {
@@ -101,14 +111,24 @@ function UploadPageContent() {
 
     setErrorMsg(null);
     try {
+      if (sourceMode === "youtube") {
+        // No upload step - the backend downloads the video itself as part
+        // of the background job (see pipeline_runner.py), so this just
+        // records the job and the progress page shows a "downloading" step.
+        setPhase("creating-job");
+        const { job_id } = await createJob({ youtube_url: youtubeUrl.trim(), options });
+        router.push(`/jobs/${job_id}`);
+        return;
+      }
+
       setPhase("uploading");
       setUploadPct(0);
       const { upload_id, put_url } = await createUpload({
-        filename: file.name,
-        content_type: file.type || "application/octet-stream",
+        filename: file!.name,
+        content_type: file!.type || "application/octet-stream",
       });
 
-      await putFileToR2(put_url, file, setUploadPct);
+      await putFileToR2(put_url, file!, setUploadPct);
 
       setPhase("creating-job");
       const { job_id } = await createJob({ upload_id, options });
@@ -135,60 +155,102 @@ function UploadPageContent() {
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10 space-y-10">
-          {/* -------------------------------------------------- File drop */}
+          {/* -------------------------------------------------- Source */}
           <div>
             <label className="field-label">Source video</label>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragActive(true);
-              }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragActive(false);
-                onFiles(e.dataTransfer.files);
-              }}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
-                dragActive
-                  ? "border-signal-500 bg-signal-500/5"
-                  : "border-ink-600 hover:border-ink-500"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/*"
-                className="sr-only"
-                onChange={(e) => onFiles(e.target.files)}
+
+            <div className="mb-4 inline-flex rounded-xl border border-ink-600 bg-ink-900 p-1">
+              <button
+                type="button"
                 disabled={busy}
-              />
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-ink-800 text-signal-400">
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                  <path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M4 16v2.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V16" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              {file ? (
-                <div>
-                  <p className="font-medium text-ink-100">{file.name}</p>
-                  <p className="mt-0.5 text-sm text-ink-400">{formatBytes(file.size)}</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="font-medium text-ink-100">
-                    Drag a video here, or click to browse
-                  </p>
-                  <p className="mt-0.5 text-sm text-ink-400">MP4, MOV, MKV — any length</p>
-                </div>
-              )}
+                onClick={() => setSourceMode("file")}
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                  sourceMode === "file" ? "bg-signal-500 text-ink-950" : "text-ink-300 hover:text-ink-100"
+                }`}
+              >
+                Upload a file
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setSourceMode("youtube")}
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                  sourceMode === "youtube" ? "bg-signal-500 text-ink-950" : "text-ink-300 hover:text-ink-100"
+                }`}
+              >
+                Paste a YouTube link
+              </button>
             </div>
+
+            {sourceMode === "file" ? (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  onFiles(e.dataTransfer.files);
+                }}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+                  dragActive
+                    ? "border-signal-500 bg-signal-500/5"
+                    : "border-ink-600 hover:border-ink-500"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="sr-only"
+                  onChange={(e) => onFiles(e.target.files)}
+                  disabled={busy}
+                />
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-ink-800 text-signal-400">
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                    <path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M4 16v2.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V16" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                {file ? (
+                  <div>
+                    <p className="font-medium text-ink-100">{file.name}</p>
+                    <p className="mt-0.5 text-sm text-ink-400">{formatBytes(file.size)}</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="font-medium text-ink-100">
+                      Drag a video here, or click to browse
+                    </p>
+                    <p className="mt-0.5 text-sm text-ink-400">MP4, MOV, MKV — any length</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="field-input"
+                  value={youtubeUrl}
+                  disabled={busy}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                />
+                <p className="mt-2 text-sm text-ink-400">
+                  We&apos;ll download the video ourselves — no need to upload anything.
+                  Public videos only.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ------------------------------------------------------ Options */}
@@ -338,7 +400,11 @@ function UploadPageContent() {
             </p>
           )}
 
-          <button type="submit" className="btn-primary w-full" disabled={busy || !file}>
+          <button
+            type="submit"
+            className="btn-primary w-full"
+            disabled={busy || (sourceMode === "file" ? !file : !youtubeUrl.trim())}
+          >
             {phase === "uploading"
               ? "Uploading…"
               : phase === "creating-job"

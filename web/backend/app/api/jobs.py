@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import get_current_user_id
-from app.jobs_repo import create_job, get_job, get_unconsumed_upload, list_clip_candidates, list_clips, list_jobs, mark_upload_consumed
+from app.jobs_repo import create_job, create_job_from_youtube, get_job, get_unconsumed_upload, list_clip_candidates, list_clips, list_jobs, mark_upload_consumed
 from app.queue import get_queue
 from app.schemas import (
     ClipOut,
@@ -19,6 +19,14 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 @router.post("", response_model=CreateJobResponse, status_code=201)
 def create_job_route(body: CreateJobRequest, user_id: str = Depends(get_current_user_id)):
+    if body.youtube_url:
+        # Downloading the video itself happens in pipeline_runner (as part
+        # of the background job), not here - a long YouTube video shouldn't
+        # make this request hang. This route just records the job.
+        job = create_job_from_youtube(user_id=user_id, youtube_url=body.youtube_url, options=body.options.model_dump())
+        get_queue().enqueue(job.id)
+        return CreateJobResponse(job_id=job.id)
+
     upload = get_unconsumed_upload(body.upload_id, user_id)
     if upload is None:
         raise HTTPException(status_code=404, detail="Upload not found")

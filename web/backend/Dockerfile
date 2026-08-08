@@ -5,7 +5,10 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
+# nodejs: yt-dlp needs a JS runtime to solve YouTube's signature challenges
+# reliably (see app/pipeline_runner.py's --js-runtimes node flag).
 
 WORKDIR /srv
 
@@ -24,4 +27,7 @@ ENV PYTHONPATH="/srv/ffmpeg-bulk-cutter"
 WORKDIR /srv/web/backend
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form (not exec form) so $PORT expands - Render (and most PaaS hosts)
+# assign a dynamic port via this env var and expect the app to bind to it;
+# falls back to 8000 for plain `docker run` / local use where it's unset.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

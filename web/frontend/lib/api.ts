@@ -28,6 +28,7 @@ export interface JobOptions {
 
 export type JobStatus =
   | "queued"
+  | "downloading"
   | "transcribing"
   | "scoring"
   | "cutting"
@@ -48,10 +49,11 @@ export interface CreateUploadResponse {
   r2_key: string;
 }
 
-export interface CreateJobRequest {
-  upload_id: string;
-  options: JobOptions;
-}
+// Exactly one of upload_id / youtube_url - matches the backend's
+// CreateJobRequest validator (web/backend/app/schemas.py).
+export type CreateJobRequest =
+  | { upload_id: string; youtube_url?: never; options: JobOptions }
+  | { upload_id?: never; youtube_url: string; options: JobOptions };
 
 export interface CreateJobResponse {
   job_id: string;

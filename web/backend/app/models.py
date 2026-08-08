@@ -19,7 +19,8 @@ def _now() -> datetime:
 
 
 # Job statuses, in pipeline order. "queued" -> ... -> "done" | "failed".
-JOB_STATUSES = ("queued", "transcribing", "scoring", "cutting", "reframing", "captioning", "uploading", "done", "failed")
+# "downloading" only appears for YouTube-sourced jobs (see pipeline_runner.py).
+JOB_STATUSES = ("queued", "downloading", "transcribing", "scoring", "cutting", "reframing", "captioning", "uploading", "done", "failed")
 
 
 class Upload(SQLModel, table=True):
@@ -37,9 +38,15 @@ class Upload(SQLModel, table=True):
 
 
 class Job(SQLModel, table=True):
+    # Exactly one of source_r2_key / source_youtube_url is set, depending on
+    # how the job was created - see api/jobs.py's create_job_route. Both are
+    # nullable rather than using a subtype/union table: two mutually
+    # exclusive nullable columns is simpler here than a second table for
+    # what's still just "where does pipeline_runner get the source video".
     id: str = Field(default_factory=_uuid, primary_key=True)
     user_id: str = Field(index=True)
-    source_r2_key: str
+    source_r2_key: str | None = Field(default=None)
+    source_youtube_url: str | None = Field(default=None)
     source_filename: str
     options: dict = Field(sa_column=Column(JSON))
     status: str = Field(default="queued", index=True)

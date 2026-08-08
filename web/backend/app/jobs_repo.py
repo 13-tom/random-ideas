@@ -51,6 +51,15 @@ def create_job(user_id: str, r2_key: str, filename: str, options: dict) -> Job:
         return job
 
 
+def create_job_from_youtube(user_id: str, youtube_url: str, options: dict) -> Job:
+    job = Job(user_id=user_id, source_youtube_url=youtube_url, source_filename=youtube_url, options=options)
+    with Session(engine) as session:
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        return job
+
+
 def get_job(job_id: str, user_id: str) -> Job | None:
     with Session(engine) as session:
         job = session.get(Job, job_id)

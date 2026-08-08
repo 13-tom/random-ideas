@@ -56,10 +56,9 @@ def run_job(job_id: str):
 def _run(job_id: str, job, workdir: Path):
     options = job.options
 
-    update_job_status(job_id, status="transcribing", progress_pct=0)
-    source_path = workdir / "source" / Path(job.source_r2_key).name
-    download_file(job.source_r2_key, source_path)
+    source_path = _acquire_source(job_id, job, workdir)
 
+    update_job_status(job_id, status="transcribing", progress_pct=10 if job.source_youtube_url else 0)
     timestamps_csv = workdir / "timestamps.csv"
     metadata_json = workdir / "timestamps_metadata.json"
     generate_cmd = [
@@ -91,6 +90,48 @@ def _run(job_id: str, job, workdir: Path):
     update_job_status(job_id, status="uploading", progress_pct=90)
     _upload_results(job_id, job, output_dir, metadata_json)
     update_job_status(job_id, status="done", progress_pct=100)
+
+
+def _acquire_source(job_id: str, job, workdir: Path) -> Path:
+    """Gets the raw source video onto local disk, from wherever it comes
+    from - an R2 upload, or (job.source_youtube_url set) a YouTube link the
+    backend downloads itself. Either way, generate_timestamps.py/
+    run_pipeline.py downstream just see a local file path - they don't
+    know or care which source type this job was."""
+    dest_dir = workdir / "source"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    if job.source_youtube_url:
+        update_job_status(job_id, status="downloading", progress_pct=0)
+        return _download_youtube(job.source_youtube_url, dest_dir, job_id)
+
+    source_path = dest_dir / Path(job.source_r2_key).name
+    download_file(job.source_r2_key, source_path)
+    return source_path
+
+
+def _download_youtube(url: str, dest_dir: Path, job_id: str) -> Path:
+    output_template = str(dest_dir / "%(id)s.%(ext)s")
+    cmd = [
+        "yt-dlp",
+        "--js-runtimes", "node",  # YouTube's extraction increasingly needs a JS runtime to solve signature challenges
+        "-f", "mp4/bestvideo+bestaudio",
+        "--merge-output-format", "mp4",
+        "--no-playlist",
+        "-o", output_template,
+        url,
+    ]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    for line in process.stdout:
+        print(f"[job {job_id}] [yt-dlp] {line.rstrip()}")
+    returncode = process.wait()
+    if returncode != 0:
+        raise RuntimeError(f"yt-dlp failed to download {url} (exit {returncode}) - is the link valid/public?")
+
+    downloaded = [p for p in dest_dir.iterdir() if p.suffix == ".mp4"]
+    if not downloaded:
+        raise RuntimeError(f"yt-dlp reported success but produced no .mp4 file for {url}")
+    return downloaded[0]
 
 
 def _run_and_track(cmd: list[str], job_id: str, pct_span: tuple[int, int], status_for_step: dict[int, str]):
