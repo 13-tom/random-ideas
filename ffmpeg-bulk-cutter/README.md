@@ -145,6 +145,34 @@ Note: `pip install -r requirements.txt` installs the standard torch build
 (supports GPU or CPU). If you don't have an NVIDIA GPU and want a smaller
 download, see the comment in `requirements.txt` for the CPU-only build.
 
+## Removing silence (jump cuts)
+
+`remove_silence.py` does Descript/CapCut-style auto-cut: it detects silent
+gaps and splices out everything except the spoken segments, producing a
+shorter video with a continuous timeline (no gaps, no black frames).
+
+```
+python remove_silence.py clip.mp4 -o jumpcut.mp4
+python remove_silence.py clips/ -o jumpcut_clips
+python remove_silence.py clips/ -o jumpcut_clips --min-silence 0.4 --padding 0.1
+```
+
+- `--min-silence` (default 0.5s) — gaps shorter than this are left alone as
+  natural speech rhythm (breaths, pauses between words); only longer gaps
+  get cut.
+- `--padding` (default 0.12s) — a little audio/video is kept just before
+  and after each spoken segment so words aren't clipped right at the cut.
+- `--noise-db` (default `-35dB`) — volume threshold below which audio
+  counts as silence; lower it (e.g. `-40dB`) if quiet speech is getting
+  detected as silence, raise it (e.g. `-30dB`) if background noise/hum is
+  preventing gaps from being detected.
+
+Run this **before** captioning, not after — since it changes the video's
+timeline, captions transcribed from the original video would no longer line
+up. Transcribe the *output* of this script instead (or use
+`run_pipeline.py --remove-silence`, below) and the caption timestamps come
+out correctly matched to the new, shorter timeline automatically.
+
 ## Aspect ratio cropping
 
 Crop a video (or a folder of clips) to a fixed aspect ratio:
@@ -428,18 +456,26 @@ automatically the same way every other script here does.
 
 ## Full pipeline (one command)
 
-`run_pipeline.py` chains cutting, reframing, and subtitling together — raw
-video in, captioned Reels-ready clips out:
+`run_pipeline.py` chains cutting, silence removal, reframing, and
+subtitling together — raw video in, captioned Reels-ready clips out:
 
 ```
 python run_pipeline.py raw_video.mp4 timestamps.csv -o output \
-  --aspect vertical --track-faces --language hinglish --caption-style highlight --reencode
+  --remove-silence --aspect vertical --track-faces --language hinglish --caption-style highlight --reencode
 ```
 
 This writes:
 - `output/clips/` — the cut clips (original aspect ratio, no captions)
+- `output/jumpcut/` — silence removed (skipped unless `--remove-silence`)
 - `output/reframed/` — clips cropped to `--aspect` (skipped if `--aspect original`, the default)
 - `output/captioned/` — caption files + `_captioned.mp4` videos, ready to post
+
+`--remove-silence` runs *before* reframing/captioning on purpose: each step
+transcribes/processes whatever clip is currently on disk at that point in
+the pipeline, so cutting silence first means the caption timestamps
+naturally match the already-shortened timeline — no separate timestamp
+remapping needed. Use `--min-silence`, `--padding`, `--noise-db` to tune it
+(see `remove_silence.py` above).
 
 It accepts the same `--language`, `--model`, `--caption-style` (and its
 font/color flags), and `--no-gpu` flags as `add_subtitles.py`, plus

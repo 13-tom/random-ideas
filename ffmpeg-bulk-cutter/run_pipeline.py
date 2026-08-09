@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
-"""End-to-end pipeline: raw video -> cut clips -> reframe -> burn captions.
+"""End-to-end pipeline: raw video -> cut clips -> remove silence -> reframe -> burn captions.
 
 Usage:
     python run_pipeline.py raw.mp4 timestamps.csv -o output
     python run_pipeline.py raw.mp4 timestamps.csv -o output --aspect vertical --language hinglish
     python run_pipeline.py raw.mp4 timestamps.csv -o output --caption-style highlight --highlight-color "#00FFCC"
+    python run_pipeline.py raw.mp4 timestamps.csv -o output --remove-silence
 
-Runs cut_clips.py, reframe.py, and add_subtitles.py back to back:
+Runs cut_clips.py, (optionally) remove_silence.py, reframe.py, and
+add_subtitles.py back to back:
     output/clips/       - the cut clips (silent, no captions, original aspect)
+    output/jumpcut/     - silence removed (skipped unless --remove-silence)
     output/reframed/    - clips cropped to --aspect (skipped if --aspect original)
     output/captioned/   - caption files + burned-in videos, ready to post
+
+--remove-silence runs BEFORE reframing/captioning on purpose - captions are
+transcribed from whichever clip is current at that point in the pipeline,
+so cutting silence first means the caption timestamps naturally match the
+already-shortened timeline (see remove_silence.py for why this order
+matters).
 
 Automatically uses an NVIDIA GPU for encoding and transcription if one is
 detected, falling back to CPU otherwise (see gpu_utils.py). Use --no-gpu to
@@ -25,6 +34,7 @@ import add_subtitles
 import cut_clips
 import gpu_utils
 import reframe
+import remove_silence
 from captions import CaptionStyle, parse_color
 
 
@@ -42,6 +52,10 @@ def main():
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto; ignored when --language hinglish is used (default: small)")
     parser.add_argument("--hinglish-model", default=add_subtitles.DEFAULT_HINGLISH_MODEL, choices=add_subtitles.HINGLISH_MODEL_CHOICES, help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift/tiny (default, fastest), prime/small (more accurate), apex/large (largest/most accurate).")
     parser.add_argument("--reencode", action="store_true", help="Frame-accurate cuts (recommended before captioning, since it lines subtitles up with clean clip boundaries)")
+    parser.add_argument("--remove-silence", action="store_true", help="Jump-cut out silent gaps before reframing/captioning, like Descript/CapCut auto-cut. See remove_silence.py --help for details.")
+    parser.add_argument("--min-silence", type=float, default=remove_silence.DEFAULT_MIN_SILENCE, help=f"Only relevant with --remove-silence: minimum gap duration (seconds) to cut (default: {remove_silence.DEFAULT_MIN_SILENCE})")
+    parser.add_argument("--padding", type=float, default=remove_silence.DEFAULT_PADDING, help=f"Only relevant with --remove-silence: seconds kept just before/after each spoken segment so words aren't clipped (default: {remove_silence.DEFAULT_PADDING})")
+    parser.add_argument("--noise-db", default=remove_silence.DEFAULT_NOISE_DB, help=f"Only relevant with --remove-silence: volume threshold below which audio counts as silence (default: {remove_silence.DEFAULT_NOISE_DB})")
     parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain", help="See add_subtitles.py --help for details (default: plain)")
     parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial)")
     parser.add_argument("--font-size", type=int, default=64, help="Font size for word/highlight caption styles (default: 64)")
@@ -91,7 +105,11 @@ def main():
     captioned_dir = args.output_dir / "captioned"
     clips_dir.mkdir(parents=True, exist_ok=True)
     captioned_dir.mkdir(parents=True, exist_ok=True)
-    total_steps = 3 if args.aspect != "original" else 2
+    total_steps = 2
+    if args.remove_silence:
+        total_steps += 1
+    if args.aspect != "original":
+        total_steps += 1
     step = 1
 
     # --- Step: cut ---
@@ -106,6 +124,24 @@ def main():
         print(f"[{i}/{len(clip_rows)}] {cut_clips.format_timestamp(start)} -> {cut_clips.format_timestamp(end)}  =>  {output_path}")
         cut_clips.cut_clip(args.input, start, end, output_path, args.reencode, use_gpu_encode)
         clip_paths.append(output_path)
+
+    # --- Step: remove silence (optional) ---
+    if args.remove_silence:
+        print(f"\n=== Step {step}/{total_steps}: Removing silence (jump cut) ===")
+        step += 1
+        jumpcut_dir = args.output_dir / "jumpcut"
+        jumpcut_dir.mkdir(parents=True, exist_ok=True)
+        jumpcut_paths = []
+        for i, clip_path in enumerate(clip_paths, start=1):
+            output_path = jumpcut_dir / clip_path.name
+            old_dur, new_dur = remove_silence.remove_silence(
+                clip_path, output_path, use_gpu_encode, args.min_silence, args.padding, args.noise_db
+            )
+            cut = old_dur - new_dur
+            pct = (cut / old_dur * 100) if old_dur else 0
+            print(f"[{i}/{len(clip_paths)}] {clip_path.name}: {old_dur:.1f}s -> {new_dur:.1f}s (removed {cut:.1f}s, {pct:.0f}%)  =>  {output_path}")
+            jumpcut_paths.append(output_path)
+        clip_paths = jumpcut_paths
 
     # --- Step: reframe (optional) ---
     if args.aspect != "original":
