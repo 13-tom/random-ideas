@@ -84,7 +84,9 @@ GRID_OPACITY = 0.05
 # caption text (captions use top-anchored alignment, so multi-line text
 # grows downward from this point). The default puts it a fixed gap below
 # the video box's bottom edge, but you can set CAPTION_MARGIN_TOP to any
-# plain number yourself to move the caption independently of the video.
+# plain number yourself to move the caption independently of the video -
+# or skip editing this file entirely and pass --caption-y (and
+# --caption-position) on the command line instead, per-run.
 CAPTION_GAP = 140                                      # (used only by the default calc below)
 CAPTION_MARGIN_TOP = VIDEO_Y + VIDEO_BOX_H + CAPTION_GAP
 
@@ -148,7 +150,13 @@ def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu:
     fps = get_video_fps(input_path)
     filter_complex = (
         f"[1:v]drawgrid=width={GRID_SPACING}:height={GRID_SPACING}:thickness=1:color=white@{GRID_OPACITY}[bg];"
-        f"[0:v]{_video_filter(zoom)}[vid];"
+        # fps= locks the source onto the SAME frame clock as the canvas
+        # (not just the same nominal rate) - real-world footage (phone
+        # recordings, screen captures) is often not perfectly constant
+        # frame rate even when r_frame_rate reports a clean number, and
+        # that jitter was the last source of a small residual audio/caption
+        # lag on top of the frame-rate-mismatch bug fixed above.
+        f"[0:v]fps={fps},{_video_filter(zoom)}[vid];"
         f"[bg][vid]overlay=x=(W-w)/2:y={VIDEO_Y}+({VIDEO_BOX_H}-h)/2[outv]"
     )
     base_cmd = [
@@ -215,9 +223,21 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, arg
         ass_path = output_dir / f"{video_path.stem}.ass"
         video_res = (CANVAS_W, CANVAS_H)
         if args.caption_style == "word":
-            write_ass_word_mode(caption_words, ass_path, video_res, caption_style)
+            count = write_ass_word_mode(caption_words, ass_path, video_res, caption_style)
         else:
-            write_ass_highlight_mode(caption_words, ass_path, video_res, caption_style, args.max_words)
+            count = write_ass_highlight_mode(caption_words, ass_path, video_res, caption_style, args.max_words)
+        print(f"    -> {ass_path} ({count} caption line(s))")
+        if count == 0:
+            # caption_words was non-empty, but every word got filtered out
+            # while building the .ass lines (e.g. degenerate/zero-length
+            # word timestamps) - burning still "succeeds" but the output
+            # has no visible captions at all, which otherwise looks
+            # identical to a silent failure. Surface it explicitly instead
+            # of burning a blank subtitle track.
+            print("    WARNING: 0 usable caption lines from the transcribed words - the burned "
+                  "video will have NO visible captions. This usually means the word timestamps "
+                  "came back degenerate (start >= end). Try a different --model/--hinglish-model, "
+                  "or --caption-style word instead of highlight.")
         print(f"    Burning captions...")
         burn_ass(framed_path, ass_path, output_path, use_gpu_encode)
         framed_path.unlink()
@@ -247,6 +267,8 @@ def main():
     parser.add_argument("--all-caps", action="store_true", help="ALL CAPS captions")
     parser.add_argument("--box", action="store_true", help="Highlight the active caption word with a solid colored box instead of colored text")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen caption line (default: 5)")
+    parser.add_argument("--caption-position", choices=["bottom", "middle", "top"], default="top", help="Vertical anchor for captions: top = grows down from --caption-y (default, matches the reference template), bottom = grows up from --caption-y measured off the bottom edge, middle = vertically centered on --caption-y (default: top)")
+    parser.add_argument("--caption-y", type=int, default=None, help=f"Manually override the caption's vertical position in pixels, instead of editing CAPTION_MARGIN_TOP/CAPTION_GAP in the script. Meaning depends on --caption-position (top = distance from canvas top, bottom = distance from canvas bottom, middle = distance from canvas top to the centered text). Default: {CAPTION_MARGIN_TOP} (computed from VIDEO_Y/VIDEO_BOX_H/CAPTION_GAP below the video box)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     parser.add_argument("--groq", action="store_true", help="Only relevant with --language hinglish: use Groq's paid hosted Whisper API instead of the free local model. See add_subtitles.py --help for details.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
@@ -264,7 +286,8 @@ def main():
             text_rgb=parse_color(args.text_color), highlight_rgb=parse_color(args.highlight_color),
             outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
             bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
-            box=args.box, position="top", margin_v=CAPTION_MARGIN_TOP,
+            box=args.box, position=args.caption_position,
+            margin_v=args.caption_y if args.caption_y is not None else CAPTION_MARGIN_TOP,
         )
     except ValueError as e:
         sys.exit(str(e))

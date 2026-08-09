@@ -428,25 +428,21 @@ If one clip in a batch fails (bad audio, corrupt file, etc.) it's reported
 and skipped - the rest of the batch still runs, rather than the whole
 command aborting.
 
-- `--headline "TEXT"` — top-zone headline. Wrap a word in `*asterisks*` to
-  render it in the highlight color, e.g. `"SAM ALTMAN *WARNS* ABOUT AI"`
-  highlights just "WARNS" (matches the yellow-keyword look in the reference
-  template). Wraps to a second line automatically if it's long.
-- `--brand "TEXT"` — small pill/badge above the headline (e.g. an account
-  handle). Uses the same opaque-box ASS trick as `--box` captions.
-- `--headline-color`, `--headline-highlight-color`, `--headline-font`,
-  `--headline-font-size`, `--brand-color`, `--brand-font-size` — styling for
-  the above.
-- Captions in the reading zone reuse the exact same transcription/styling
-  engine as `add_subtitles.py` — `--language`, `--model`, `--caption-style`
-  (`word`/`highlight`), `--font`, `--font-size`, `--text-color`,
-  `--highlight-color`, `--outline-color`/`--outline-width`, `--no-bold`,
-  `--italic`, `--all-caps`, `--box`, `--max-words` all work the same way (see
-  the "Styled captions" section above). Position is fixed to the reading
-  zone below the clip - not configurable here, since that's the whole point
-  of the template.
-- `--no-captions` — compose the frame + headline/brand only, skip
-  transcription (useful if you want to add captions separately, or none).
+- Captions reuse the exact same transcription/styling engine as
+  `add_subtitles.py` — `--language`, `--model`, `--hinglish-model`,
+  `--caption-style` (`word`/`highlight`), `--font`, `--font-size`,
+  `--text-color`, `--highlight-color`, `--outline-color`/`--outline-width`,
+  `--no-bold`, `--italic`, `--all-caps`, `--box`, `--max-words` all work the
+  same way (see the "Styled captions" section above).
+- `--caption-y PIXELS` — move the caption without touching the file: pass
+  any pixel value on the command line to override `CAPTION_MARGIN_TOP` for
+  that run only. `--caption-position {top,bottom,middle}` (default `top`)
+  changes what that number is measured from — `top` (default) = distance
+  from the canvas's top edge with text growing downward (matches the
+  reference template), `bottom` = distance from the canvas's bottom edge
+  with text growing upward, `middle` = vertically centered on that point.
+- `--no-captions` — compose the frame only, skip transcription (useful if
+  you want to add captions separately, or none).
 
 The source clip's own aspect ratio doesn't have to be exactly 16:9 - it's
 scaled to fit inside the content zone's box while preserving its own aspect
