@@ -86,7 +86,15 @@ def load_whisper_model(model_size: str, use_gpu: bool):
 
 def load_hinglish_pipeline(use_gpu: bool, model_size: str = DEFAULT_HINGLISH_MODEL):
     from transformers import pipeline
+    from transformers.utils import logging as hf_logging
     import torch
+
+    # Quiets transformers' internal chatter (logits-processor precedence
+    # notices, "did not predict an ending timestamp", etc.) - all
+    # informational, none of it indicates a transcription problem, and it
+    # was cluttering the console/getting mistaken for real errors. Actual
+    # problems still raise exceptions or print through our own code below.
+    hf_logging.set_verbosity_error()
 
     model_id = HINGLISH_MODELS[_resolve_hinglish_model(model_size)]
 
