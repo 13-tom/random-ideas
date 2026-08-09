@@ -39,7 +39,7 @@ from pathlib import Path
 
 import gpu_utils
 from captions import CaptionStyle, parse_color, write_ass_highlight_mode, write_ass_word_mode
-from ffmpeg_utils import get_media_duration
+from ffmpeg_utils import get_media_duration, get_video_fps
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
@@ -135,6 +135,17 @@ def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu:
     always, and vertically too since a letterboxed (zoom<=1.0) video can be
     shorter than the box. No captions yet - that's a separate burn pass
     once we know the caption text/timing."""
+    # The generated background must run at the SAME frame rate as the real
+    # source video. Without an explicit :r=, the lavfi color source defaults
+    # to 25fps - if the source is anything else (24/30/29.97fps footage is
+    # extremely common), overlay has to reconcile two video streams ticking
+    # at different rates, and combined with -shortest below this was
+    # confirmed (via a synthetic 30fps test) to truncate the composed
+    # video to a fraction of its real length, and more generally to
+    # introduce audio/video timing drift even when it doesn't truncate
+    # outright - which is what was showing up as subtitles drifting out of
+    # sync with the audio.
+    fps = get_video_fps(input_path)
     filter_complex = (
         f"[1:v]drawgrid=width={GRID_SPACING}:height={GRID_SPACING}:thickness=1:color=white@{GRID_OPACITY}[bg];"
         f"[0:v]{_video_filter(zoom)}[vid];"
@@ -143,7 +154,7 @@ def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu:
     base_cmd = [
         "ffmpeg", "-y", "-nostdin",
         "-i", str(input_path),
-        "-f", "lavfi", "-i", f"color=c={BG_COLOR}:s={CANVAS_W}x{CANVAS_H}:d={duration}",
+        "-f", "lavfi", "-i", f"color=c={BG_COLOR}:s={CANVAS_W}x{CANVAS_H}:d={duration}:r={fps}",
         "-filter_complex", filter_complex,
         "-map", "[outv]", "-map", "0:a?",
     ]
