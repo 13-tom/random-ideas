@@ -53,7 +53,20 @@ HINGLISH_MODELS = {
     "prime": "Oriserve/Whisper-Hindi2Hinglish-Prime",
     "apex": "Oriserve/Whisper-Hindi2Hinglish-Apex",
 }
+# Familiar tiny/small/large-style aliases (matching the naming convention
+# faster-whisper's --model already uses for en/hi/auto) for whichever
+# vocabulary is easier to remember - both point at the same three models.
+HINGLISH_MODEL_ALIASES = {
+    "tiny": "swift",
+    "small": "prime",
+    "large": "apex",
+}
+HINGLISH_MODEL_CHOICES = list(HINGLISH_MODELS) + list(HINGLISH_MODEL_ALIASES)
 DEFAULT_HINGLISH_MODEL = "swift"
+
+
+def _resolve_hinglish_model(name: str) -> str:
+    return HINGLISH_MODEL_ALIASES.get(name, name)
 
 
 def load_whisper_model(model_size: str, use_gpu: bool):
@@ -75,7 +88,7 @@ def load_hinglish_pipeline(use_gpu: bool, model_size: str = DEFAULT_HINGLISH_MOD
     from transformers import pipeline
     import torch
 
-    model_id = HINGLISH_MODELS[model_size]
+    model_id = HINGLISH_MODELS[_resolve_hinglish_model(model_size)]
 
     # No chunk_length_s/stride_length_s here on purpose: that's the
     # pipeline's own long-audio splitting, which transformers itself warns
@@ -417,7 +430,7 @@ def main():
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("subtitled"), help="Where to write caption files (and burned videos) (default: ./subtitled)")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="Force a language, auto-detect, or 'hinglish' for Roman-script Hindi+English (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto (default: small - best speed/accuracy balance on CPU). Ignored when --language hinglish is used.")
-    parser.add_argument("--hinglish-model", default=DEFAULT_HINGLISH_MODEL, choices=list(HINGLISH_MODELS), help=f"Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift (default, fastest), prime (more accurate), apex (largest/most accurate, ~800M params). Ignored with --groq.")
+    parser.add_argument("--hinglish-model", default=DEFAULT_HINGLISH_MODEL, choices=HINGLISH_MODEL_CHOICES, help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift/tiny (default, fastest), prime/small (more accurate), apex/large (largest/most accurate, ~800M params). Ignored with --groq.")
     parser.add_argument("--burn", action="store_true", help="Also produce a copy of the video with subtitles burned in")
     parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain",
                          help="plain = one .srt line per sentence (default, matches Premiere/Resolve import). "

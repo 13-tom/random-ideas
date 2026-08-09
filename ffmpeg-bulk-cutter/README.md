@@ -74,10 +74,11 @@ python add_subtitles.py clips -o subtitled --burn
   requirements.txt` pulls the CPU build of torch, a few hundred MB).
   `--model` is ignored in this mode — that flag is for en/hi/auto. Use
   `--hinglish-model` instead to pick which of Oriserve's three sizes to
-  use:
-  - [`swift`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift) (default) — smallest/fastest, still CPU-friendly
-  - [`prime`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Prime) — more accurate, ~39% better than baseline Whisper per Oriserve's benchmarks
-  - [`apex`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Apex) — largest (~800M params), most accurate, more robust on noisy/accented audio
+  use (each also accepts a tiny/small/large alias, in case that naming is
+  easier to remember than Oriserve's own):
+  - [`swift`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift) / `tiny` (default) — smallest/fastest, still CPU-friendly
+  - [`prime`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Prime) / `small` — more accurate, ~39% better than baseline Whisper per Oriserve's benchmarks
+  - [`apex`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Apex) / `large` — largest (~800M params), most accurate, more robust on noisy/accented audio
 
   This is the **free** option, and the default. For clips over ~25 seconds,
   audio is split ourselves at silence gaps and each piece transcribed

@@ -40,7 +40,7 @@ def main():
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto; ignored when --language hinglish is used (default: small)")
-    parser.add_argument("--hinglish-model", default=add_subtitles.DEFAULT_HINGLISH_MODEL, choices=list(add_subtitles.HINGLISH_MODELS), help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift (default, fastest), prime (more accurate), apex (largest/most accurate).")
+    parser.add_argument("--hinglish-model", default=add_subtitles.DEFAULT_HINGLISH_MODEL, choices=add_subtitles.HINGLISH_MODEL_CHOICES, help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift/tiny (default, fastest), prime/small (more accurate), apex/large (largest/most accurate).")
     parser.add_argument("--reencode", action="store_true", help="Frame-accurate cuts (recommended before captioning, since it lines subtitles up with clean clip boundaries)")
     parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain", help="See add_subtitles.py --help for details (default: plain)")
     parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial)")

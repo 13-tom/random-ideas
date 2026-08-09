@@ -223,7 +223,7 @@ def main():
     parser.add_argument("--no-captions", action="store_true", help="Compose the frame only, skip transcription")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help (default: auto)")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto, ignored for --language hinglish (default: small)")
-    parser.add_argument("--hinglish-model", default="swift", choices=["swift", "prime", "apex"], help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift (default, fastest), prime (more accurate), apex (largest/most accurate).")
+    parser.add_argument("--hinglish-model", default="swift", choices=["swift", "prime", "apex", "tiny", "small", "large"], help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift/tiny (default, fastest), prime/small (more accurate), apex/large (largest/most accurate).")
     parser.add_argument("--caption-style", choices=["word", "highlight"], default="highlight", help="word = one word at a time. highlight = full line with active word highlighted (default: highlight)")
     parser.add_argument("--font", default="Arial", help="Caption font family (default: Arial)")
     parser.add_argument("--font-size", type=int, default=56, help="Caption font size (default: 56)")
