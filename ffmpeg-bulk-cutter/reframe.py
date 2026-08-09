@@ -88,7 +88,7 @@ ASPECT_PRESETS = {
 
 def reframe_video(input_path: Path, output_path: Path, aspect: str, use_gpu: bool = False):
     crop_expr, target_res = ASPECT_PRESETS[aspect]
-    vf = f"{crop_expr},scale={target_res}"
+    vf = f"{crop_expr},scale={target_res}:flags=lanczos"
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf]
 
     if use_gpu:

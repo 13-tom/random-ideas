@@ -157,7 +157,7 @@ python remove_silence.py clips/ -o jumpcut_clips
 python remove_silence.py clips/ -o jumpcut_clips --min-silence 0.4 --padding 0.1
 ```
 
-- `--min-silence` (default 0.5s) — gaps shorter than this are left alone as
+- `--min-silence` (default 0.7s) — gaps shorter than this are left alone as
   natural speech rhythm (breaths, pauses between words); only longer gaps
   get cut.
 - `--padding` (default 0.12s) — a little audio/video is kept just before

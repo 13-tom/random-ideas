@@ -26,7 +26,7 @@ from add_subtitles import _detect_silences
 from ffmpeg_utils import get_media_duration
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
-DEFAULT_MIN_SILENCE = 0.5   # seconds - shorter gaps are natural speech pauses, left alone
+DEFAULT_MIN_SILENCE = 0.7   # seconds - shorter gaps are natural speech pauses, left alone
 DEFAULT_PADDING = 0.12      # seconds kept just before/after each spoken segment so words don't get clipped
 DEFAULT_NOISE_DB = "-35dB"
 

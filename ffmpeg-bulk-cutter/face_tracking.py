@@ -388,7 +388,7 @@ def _build_zoom_path(gesture_samples, total_frames: int, fps: float):
 
 def _fixed_crop_video(input_path: Path, output_path: Path, x: int, y: int, crop_w: int, crop_h: int,
                        target_res: str, use_gpu: bool):
-    vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale={target_res}"
+    vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale={target_res}:flags=lanczos"
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf]
 
     if use_gpu:
@@ -497,7 +497,7 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{pipe_w}x{pipe_h}", "-r", str(fps), "-i", "pipe:0",
         "-i", str(input_path),
         "-map", "0:v", "-map", "1:a?",
-        "-vf", f"scale={target_res}",
+        "-vf", f"scale={target_res}:flags=lanczos",
         "-c:v", "h264_nvenc" if use_gpu else "libx264", "-c:a", "copy",
         "-shortest", str(output_path),
     ]
@@ -520,7 +520,7 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         y = int(min(max(cy - crop_h * HEADROOM_FRACTION, 0), src_h - crop_h))
         cropped = frame[y:y + crop_h, x:x + crop_w]
         if (crop_w, crop_h) != (pipe_w, pipe_h):
-            cropped = cv2.resize(cropped, (pipe_w, pipe_h), interpolation=cv2.INTER_LINEAR)
+            cropped = cv2.resize(cropped, (pipe_w, pipe_h), interpolation=cv2.INTER_LANCZOS4)
         proc.stdin.write(cropped.tobytes())
         frame_idx += 1
     cap.release()
