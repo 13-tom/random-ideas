@@ -75,6 +75,20 @@ def load_whisper_model(model_size: str, use_gpu: bool):
     if use_gpu:
         try:
             model = WhisperModel(model_size, device="cuda", compute_type="float16")
+            # Constructing WhisperModel(device="cuda") succeeding doesn't
+            # guarantee GPU inference actually works - CTranslate2 (faster-
+            # whisper's backend) defers real CUDA initialization until the
+            # first encode call, so a missing system-level cuBLAS/cuDNN DLL
+            # (a real, confirmed Windows failure mode - a separate
+            # dependency from PyTorch's own bundled CUDA runtime, which is
+            # why the Hinglish GPU path can work fine while this one
+            # doesn't) only surfaces mid-transcription of a real clip
+            # otherwise, outside this try/except entirely. Force it now
+            # with a throwaway 1-second silent buffer instead, so a broken
+            # GPU setup falls back to CPU cleanly before any real work
+            # starts, not partway through a user's actual video.
+            import numpy as np
+            list(model.transcribe(np.zeros(16000, dtype=np.float32))[0])
             print(f"Loaded Whisper '{model_size}' on GPU (CUDA, float16)")
             return model
         except Exception as e:
