@@ -222,7 +222,8 @@ def main():
     parser.add_argument("--zoom", type=float, default=DEFAULT_ZOOM, help=f"1.0 (default) = show the full frame, letterboxed if needed, nothing cropped. Above 1.0 crops in by that factor and fills the box completely instead, e.g. 1.3 = crops in 30%% (default: {DEFAULT_ZOOM})")
     parser.add_argument("--no-captions", action="store_true", help="Compose the frame only, skip transcription")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help (default: auto)")
-    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size, ignored for --language hinglish (default: small)")
+    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto, ignored for --language hinglish (default: small)")
+    parser.add_argument("--hinglish-model", default="swift", choices=["swift", "prime", "apex"], help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift (default, fastest), prime (more accurate), apex (largest/most accurate).")
     parser.add_argument("--caption-style", choices=["word", "highlight"], default="highlight", help="word = one word at a time. highlight = full line with active word highlighted (default: highlight)")
     parser.add_argument("--font", default="Arial", help="Caption font family (default: Arial)")
     parser.add_argument("--font-size", type=int, default=56, help="Caption font size (default: 56)")
@@ -287,7 +288,7 @@ def main():
                 except ImportError:
                     sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
                 from add_subtitles import load_hinglish_pipeline
-                pipe = load_hinglish_pipeline(use_gpu_whisper)
+                pipe = load_hinglish_pipeline(use_gpu_whisper, args.hinglish_model)
         else:
             try:
                 from faster_whisper import WhisperModel  # noqa: F401

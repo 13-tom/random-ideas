@@ -18,13 +18,16 @@ Notes on language:
                         script - this is plain Whisper's normal Hindi
                         behavior, NOT Romanized "Hinglish")
     --language auto     lets faster-whisper auto-detect the language (default)
-    --language hinglish uses Oriserve/Whisper-Hindi2Hinglish-Swift by default
-                        (free, runs locally, needs torch + transformers -
-                        see requirements.txt), a model fine-tuned to output
-                        Hindi+English code-switched speech fully in Roman
-                        script (true "Hinglish" text). Add --groq to use
-                        Groq's paid hosted API instead - see --groq --help
-                        below. --model is ignored in this mode either way.
+    --language hinglish uses a free, local Oriserve Whisper-Hindi2Hinglish
+                        model (needs torch + transformers - see
+                        requirements.txt), fine-tuned to output Hindi+English
+                        code-switched speech fully in Roman script (true
+                        "Hinglish" text). --hinglish-model picks the size:
+                        swift (default, fastest), prime (more accurate),
+                        apex (largest, most accurate, ~800M params). Add
+                        --groq to use Groq's paid hosted API instead - see
+                        --groq --help below. --model is ignored in this mode
+                        either way (that's for en/hi/auto).
 """
 import argparse
 import os
@@ -39,7 +42,18 @@ from captions import CaptionStyle, Word, parse_color, write_ass_highlight_mode, 
 from ffmpeg_utils import get_media_duration, get_video_resolution
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
-HINGLISH_MODEL_ID = "Oriserve/Whisper-Hindi2Hinglish-Swift"
+
+# Oriserve publishes three sizes of their Hindi+English-to-Hinglish
+# fine-tune. Swift is smallest/fastest (the long-standing default here).
+# Prime and Apex trade speed for accuracy - Apex (~800M params) is their
+# most advanced tier, trained on the most data, and Oriserve claims it's
+# also more robust on noisy/accented audio than Prime.
+HINGLISH_MODELS = {
+    "swift": "Oriserve/Whisper-Hindi2Hinglish-Swift",
+    "prime": "Oriserve/Whisper-Hindi2Hinglish-Prime",
+    "apex": "Oriserve/Whisper-Hindi2Hinglish-Apex",
+}
+DEFAULT_HINGLISH_MODEL = "swift"
 
 
 def load_whisper_model(model_size: str, use_gpu: bool):
@@ -57,9 +71,11 @@ def load_whisper_model(model_size: str, use_gpu: bool):
     return model
 
 
-def load_hinglish_pipeline(use_gpu: bool):
+def load_hinglish_pipeline(use_gpu: bool, model_size: str = DEFAULT_HINGLISH_MODEL):
     from transformers import pipeline
     import torch
+
+    model_id = HINGLISH_MODELS[model_size]
 
     # No chunk_length_s/stride_length_s here on purpose: that's the
     # pipeline's own long-audio splitting, which transformers itself warns
@@ -72,13 +88,13 @@ def load_hinglish_pipeline(use_gpu: bool):
     # window-stitching involved, so no drift.
     if use_gpu:
         try:
-            pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=0, torch_dtype=torch.float16)
-            print(f"Loaded {HINGLISH_MODEL_ID} on GPU (CUDA, float16)")
+            pipe = pipeline("automatic-speech-recognition", model=model_id, device=0, torch_dtype=torch.float16)
+            print(f"Loaded {model_id} on GPU (CUDA, float16)")
             return pipe
         except Exception as e:
             print(f"GPU load failed ({e}); falling back to CPU")
-    pipe = pipeline("automatic-speech-recognition", model=HINGLISH_MODEL_ID, device=-1, torch_dtype=torch.float32)
-    print(f"Loaded {HINGLISH_MODEL_ID} on CPU")
+    pipe = pipeline("automatic-speech-recognition", model=model_id, device=-1, torch_dtype=torch.float32)
+    print(f"Loaded {model_id} on CPU")
     return pipe
 
 
@@ -400,7 +416,8 @@ def main():
     parser.add_argument("input", type=Path, help="A video file, or a folder of video clips")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("subtitled"), help="Where to write caption files (and burned videos) (default: ./subtitled)")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="Force a language, auto-detect, or 'hinglish' for Roman-script Hindi+English (default: auto)")
-    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size (default: small - best speed/accuracy balance on CPU). Ignored when --language hinglish is used.")
+    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto (default: small - best speed/accuracy balance on CPU). Ignored when --language hinglish is used.")
+    parser.add_argument("--hinglish-model", default=DEFAULT_HINGLISH_MODEL, choices=list(HINGLISH_MODELS), help=f"Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift (default, fastest), prime (more accurate), apex (largest/most accurate, ~800M params). Ignored with --groq.")
     parser.add_argument("--burn", action="store_true", help="Also produce a copy of the video with subtitles burned in")
     parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain",
                          help="plain = one .srt line per sentence (default, matches Premiere/Resolve import). "
@@ -478,7 +495,7 @@ def main():
                 from transformers import pipeline  # noqa: F401
             except ImportError:
                 sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
-            pipe = load_hinglish_pipeline(use_gpu_whisper)
+            pipe = load_hinglish_pipeline(use_gpu_whisper, args.hinglish_model)
 
         for i, video_path in enumerate(videos, start=1):
             process_video(video_path, args.output_dir, i, len(videos), language=None, pipe=pipe,

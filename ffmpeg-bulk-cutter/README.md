@@ -68,12 +68,17 @@ python add_subtitles.py clips -o subtitled --burn
   English words kept in Latin script — this is Whisper's normal Hindi
   behavior, not Romanized "Hinglish" text.
 - `--language hinglish` uses a model fine-tuned specifically for Hindi+English
-  code-switched speech ([Oriserve/Whisper-Hindi2Hinglish-Swift](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift))
-  and outputs fully in Roman script — true Hinglish text like `mujhe office
-  jana hai lekin traffic bahut zyada hai`, not Devanagari. This needs torch +
-  transformers (`pip install -r requirements.txt` pulls the CPU build of
-  torch, a few hundred MB). `--model` is ignored in this mode — it's a fixed,
-  small (Whisper-base-sized, ~73M params) model, so it's still CPU-friendly.
+  code-switched speech and outputs fully in Roman script — true Hinglish
+  text like `mujhe office jana hai lekin traffic bahut zyada hai`, not
+  Devanagari. This needs torch + transformers (`pip install -r
+  requirements.txt` pulls the CPU build of torch, a few hundred MB).
+  `--model` is ignored in this mode — that flag is for en/hi/auto. Use
+  `--hinglish-model` instead to pick which of Oriserve's three sizes to
+  use:
+  - [`swift`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Swift) (default) — smallest/fastest, still CPU-friendly
+  - [`prime`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Prime) — more accurate, ~39% better than baseline Whisper per Oriserve's benchmarks
+  - [`apex`](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Apex) — largest (~800M params), most accurate, more robust on noisy/accented audio
+
   This is the **free** option, and the default. For clips over ~25 seconds,
   audio is split ourselves at silence gaps and each piece transcribed
   separately with its timestamps corrected back onto the full clip's

@@ -39,7 +39,8 @@ def main():
     parser.add_argument("--zoom-on-gesture", action="store_true", help="Ease out to a wider crop when a hand is detected (gesturing) so it doesn't get clipped, then ease back in. Only relevant with --track-faces --track-mode dynamic.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--language", choices=["en", "hi", "auto", "hinglish"], default="auto", help="See add_subtitles.py --help for details (default: auto)")
-    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size; ignored when --language hinglish is used (default: small)")
+    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Whisper model size for en/hi/auto; ignored when --language hinglish is used (default: small)")
+    parser.add_argument("--hinglish-model", default=add_subtitles.DEFAULT_HINGLISH_MODEL, choices=list(add_subtitles.HINGLISH_MODELS), help="Which local Hinglish model size to use (only relevant with --language hinglish, no --groq): swift (default, fastest), prime (more accurate), apex (largest/most accurate).")
     parser.add_argument("--reencode", action="store_true", help="Frame-accurate cuts (recommended before captioning, since it lines subtitles up with clean clip boundaries)")
     parser.add_argument("--caption-style", choices=["plain", "word", "highlight"], default="plain", help="See add_subtitles.py --help for details (default: plain)")
     parser.add_argument("--font", default="Arial", help="Font family for word/highlight caption styles (default: Arial)")
@@ -145,7 +146,7 @@ def main():
             args.groq_model = args.groq_model or DEFAULT_GROQ_MODEL
             print(f"Using Groq API ({args.groq_model}) for Hinglish transcription (paid)")
         else:
-            pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper)
+            pipe = add_subtitles.load_hinglish_pipeline(use_gpu_whisper, args.hinglish_model)
         for i, clip_path in enumerate(clip_paths, start=1):
             add_subtitles.process_video(clip_path, captioned_dir, i, len(clip_paths), language=None, pipe=pipe,
                                          groq_api_key=groq_api_key, groq_model=args.groq_model, **common_kwargs)
