@@ -433,7 +433,12 @@ command aborting.
   `--caption-style` (`word`/`highlight`), `--font`, `--font-size`,
   `--text-color`, `--highlight-color`, `--outline-color`/`--outline-width`,
   `--no-bold`, `--italic`, `--all-caps`, `--box`, `--max-words` all work the
-  same way (see the "Styled captions" section above).
+  same way (see the "Styled captions" section above). `--groq` (+
+  `--groq-api-key`/`--groq-model`) works with **any** `--language` here
+  (`en`/`hi`/`auto`/`hinglish`), not just `hinglish` - plain English/Hindi
+  transcription via Groq skips the Hinglish style-biasing prompt entirely
+  and just requests that language directly, e.g.
+  `--language en --groq --groq-api-key sk-...`.
 - `--caption-y PIXELS` — move the caption without touching the file: pass
   any pixel value on the command line to override `CAPTION_MARGIN_TOP` for
   that run only. `--caption-position {top,bottom,middle}` (default `top`)

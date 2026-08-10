@@ -47,10 +47,13 @@ GROQ_HINGLISH_PROMPT = (
 )
 
 
-def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timestamps: bool, prompt: str = GROQ_HINGLISH_PROMPT) -> dict:
+def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timestamps: bool,
+                      language: str | None = "en", prompt: str | None = GROQ_HINGLISH_PROMPT) -> dict:
     """Sends the clip's audio to Groq's hosted Whisper API. Real per-word
     timestamps come back directly from the API when word_timestamps=True
-    (better than any proportional-interpolation guess)."""
+    (better than any proportional-interpolation guess). language=None lets
+    Groq auto-detect instead of forcing a target language - used for plain
+    (non-Hinglish) transcription."""
     import requests
 
     # Defends against a very easy copy-paste mistake: pasting extra text or
@@ -63,7 +66,9 @@ def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timesta
 
     wav_path = _extract_wav(video_path)
     try:
-        data = {"model": model, "language": "en", "response_format": "verbose_json"}
+        data = {"model": model, "response_format": "verbose_json"}
+        if language:
+            data["language"] = language
         if word_timestamps:
             data["timestamp_granularities[]"] = "word"
         if prompt:
@@ -85,6 +90,21 @@ def _groq_transcribe(video_path: Path, api_key: str, model: str, *, word_timesta
 
 def get_words_hinglish_groq(video_path: Path, api_key: str, model: str = DEFAULT_GROQ_MODEL) -> list[Word]:
     result = _groq_transcribe(video_path, api_key, model, word_timestamps=True)
+    silences = _detect_silences(video_path)
+    words = []
+    for w in result.get("words", []):
+        text = w.get("word", "").strip()
+        start, end = w.get("start"), w.get("end")
+        if text and start is not None and end is not None and not _in_silence(start, end, silences):
+            words.append(Word(start, end, text))
+    return words
+
+
+def get_words_groq(video_path: Path, api_key: str, model: str = DEFAULT_GROQ_MODEL, language: str | None = None) -> list[Word]:
+    """Plain (non-Hinglish) transcription via Groq - no forced language=en
+    decoding, no Hinglish style-biasing prompt. language: a Groq/Whisper
+    language code like 'en' or 'hi', or None to let Groq auto-detect."""
+    result = _groq_transcribe(video_path, api_key, model, word_timestamps=True, language=language, prompt=None)
     silences = _detect_silences(video_path)
     words = []
     for w in result.get("words", []):
