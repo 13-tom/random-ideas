@@ -411,14 +411,20 @@ def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu:
 def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, caption_style: str,
                    language, model=None, pipe=None, style: CaptionStyle = None,
                    max_words: int, burn: bool, use_gpu_encode: bool,
-                   groq_api_key: str = None, groq_model: str = None):
+                   groq_api_key: str = None, groq_model: str = None, hinglish: bool = False):
     print(f"[{i}/{total}] Transcribing {video_path.name}...")
 
     if caption_style == "plain":
         caption_path = output_dir / f"{video_path.stem}.srt"
         if groq_api_key:
-            from add_subtitles_groq import DEFAULT_GROQ_MODEL, transcribe_to_srt_hinglish_groq
-            count, _ = transcribe_to_srt_hinglish_groq(video_path, caption_path, groq_api_key, groq_model or DEFAULT_GROQ_MODEL)
+            from add_subtitles_groq import DEFAULT_GROQ_MODEL
+            resolved_groq_model = groq_model or DEFAULT_GROQ_MODEL
+            if hinglish:
+                from add_subtitles_groq import transcribe_to_srt_hinglish_groq
+                count, _ = transcribe_to_srt_hinglish_groq(video_path, caption_path, groq_api_key, resolved_groq_model)
+            else:
+                from add_subtitles_groq import transcribe_to_srt_groq
+                count, _ = transcribe_to_srt_groq(video_path, caption_path, groq_api_key, resolved_groq_model, language)
         elif pipe is not None:
             count, _ = transcribe_to_srt_hinglish(pipe, video_path, caption_path)
         else:
@@ -426,8 +432,14 @@ def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, cap
         print(f"    -> {caption_path} ({count} lines)")
     else:
         if groq_api_key:
-            from add_subtitles_groq import DEFAULT_GROQ_MODEL, get_words_hinglish_groq
-            words = get_words_hinglish_groq(video_path, groq_api_key, groq_model or DEFAULT_GROQ_MODEL)
+            from add_subtitles_groq import DEFAULT_GROQ_MODEL
+            resolved_groq_model = groq_model or DEFAULT_GROQ_MODEL
+            if hinglish:
+                from add_subtitles_groq import get_words_hinglish_groq
+                words = get_words_hinglish_groq(video_path, groq_api_key, resolved_groq_model)
+            else:
+                from add_subtitles_groq import get_words_groq
+                words = get_words_groq(video_path, groq_api_key, resolved_groq_model, language)
         elif pipe is not None:
             words = get_words_hinglish(pipe, video_path)
         else:
@@ -471,7 +483,7 @@ def main():
     parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
-    parser.add_argument("--groq", action="store_true", help="Only relevant with --language hinglish: use Groq's paid hosted Whisper API instead of the free local model. Faster, no local torch/transformers install needed, and gives real per-word timestamps - but costs money and needs internet + an API key.")
+    parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language. Faster, no local torch/transformers install needed, and gives real per-word timestamps - but costs money and needs internet + an API key.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
     parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo). See add_subtitles_groq.py for the dedicated Groq-only version of this tool.")
     args = parser.parse_args()
@@ -511,30 +523,32 @@ def main():
         burn=args.burn, use_gpu_encode=use_gpu_encode,
     )
 
-    if args.language == "hinglish":
-        pipe = None
-        groq_api_key = None
-        if args.groq:
-            groq_api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY")
-            if not groq_api_key:
-                sys.exit("--groq requires an API key: pass --groq-api-key or set the GROQ_API_KEY environment variable. Get one at https://console.groq.com/keys")
-            try:
-                import requests  # noqa: F401
-            except ImportError:
-                sys.exit("requests is not installed. Run: pip install requests")
-            from add_subtitles_groq import DEFAULT_GROQ_MODEL
-            args.groq_model = args.groq_model or DEFAULT_GROQ_MODEL
-            print(f"Using Groq API ({args.groq_model}) for Hinglish transcription (paid)")
-        else:
-            try:
-                from transformers import pipeline  # noqa: F401
-            except ImportError:
-                sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
-            pipe = load_hinglish_pipeline(use_gpu_whisper, args.hinglish_model)
+    is_hinglish = args.language == "hinglish"
 
+    if args.groq:
+        groq_api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY")
+        if not groq_api_key:
+            sys.exit("--groq requires an API key: pass --groq-api-key or set the GROQ_API_KEY environment variable. Get one at https://console.groq.com/keys")
+        try:
+            import requests  # noqa: F401
+        except ImportError:
+            sys.exit("requests is not installed. Run: pip install requests")
+        from add_subtitles_groq import DEFAULT_GROQ_MODEL
+        args.groq_model = args.groq_model or DEFAULT_GROQ_MODEL
+        label = "Hinglish" if is_hinglish else args.language
+        print(f"Using Groq API ({args.groq_model}) for {label} transcription (paid)")
+        language = None if args.language in ("auto", "hinglish") else args.language
         for i, video_path in enumerate(videos, start=1):
-            process_video(video_path, args.output_dir, i, len(videos), language=None, pipe=pipe,
-                           groq_api_key=groq_api_key, groq_model=args.groq_model, **common_kwargs)
+            process_video(video_path, args.output_dir, i, len(videos), language=language, pipe=None,
+                           groq_api_key=groq_api_key, groq_model=args.groq_model, hinglish=is_hinglish, **common_kwargs)
+    elif is_hinglish:
+        try:
+            from transformers import pipeline  # noqa: F401
+        except ImportError:
+            sys.exit("transformers/torch not installed. Run: pip install -r requirements.txt")
+        pipe = load_hinglish_pipeline(use_gpu_whisper, args.hinglish_model)
+        for i, video_path in enumerate(videos, start=1):
+            process_video(video_path, args.output_dir, i, len(videos), language=None, pipe=pipe, **common_kwargs)
     else:
         try:
             from faster_whisper import WhisperModel  # noqa: F401

@@ -38,6 +38,15 @@ requirements.txt).
                          subject actually is, not the frame's geometric
                          center) but won't follow a subject that moves
                          around a lot.
+    fanpage            - a calmer, tighter-zoomed variant tuned for
+                         fanpage/clip-account style edits (see
+                         fanpage_crop.py): closer zoom on a lone subject,
+                         a slower/steadier pan, and a bigger deadzone.
+                         Frames by HOW MANY people are visible rather than
+                         who's talking - automatically eases out to a
+                         wider crop that fits everyone when a 2nd person
+                         enters frame, and back to the tight single-person
+                         crop when they leave.
 
 Face detection runs on CPU by default - the model is tiny (a few ms/frame)
 so a GPU wouldn't meaningfully speed it up, and MediaPipe's GPU delegate
@@ -108,7 +117,7 @@ def main():
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("reframed"), help="Where to write reframed videos (default: ./reframed)")
     parser.add_argument("--aspect", choices=list(ASPECT_RATIOS), required=True, help="vertical = 9:16 (Reels/Stories/Shorts), square = 1:1 (feed/carousel), portrait = 4:5 (IG feed), landscape = 16:9 (YouTube)")
     parser.add_argument("--track-faces", action="store_true", help="Smart subject-tracking crop instead of a static center crop (see module docstring)")
-    parser.add_argument("--track-mode", choices=["dynamic", "static"], default="dynamic", help="dynamic = pan to follow the subject (default). static = one fixed, face-informed crop position for the whole clip - no panning, so no possible camera shake. Only relevant with --track-faces.")
+    parser.add_argument("--track-mode", choices=["dynamic", "static", "fanpage"], default="dynamic", help="dynamic = pan to follow the subject (default). static = one fixed, face-informed crop position for the whole clip - no panning, so no possible camera shake. fanpage = tighter zoom on a lone subject, slower/steadier pan, and automatically eases out to a wider crop that fits everyone when a 2nd person enters frame (see fanpage_crop.py). Only relevant with --track-faces.")
     parser.add_argument("--zoom-on-gesture", action="store_true", help="Ease out to a wider crop when a hand is detected (gesturing) so it doesn't get clipped by the tight face crop, then ease back in once the hand is gone. Only relevant with --track-faces --track-mode dynamic.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
@@ -133,10 +142,15 @@ def main():
         import face_tracking
         target_res = ASPECT_PRESETS[args.aspect][1]
         use_gpu = not args.no_gpu and gpu_utils.nvenc_works()
+        if args.track_mode == "fanpage":
+            import fanpage_crop
         for i, video_path in enumerate(videos, start=1):
             output_path = args.output_dir / video_path.name
-            print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect} (tracking faces)  =>  {output_path}")
-            face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect, args.track_mode, args.zoom_on_gesture)
+            print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect} (tracking faces, {args.track_mode})  =>  {output_path}")
+            if args.track_mode == "fanpage":
+                fanpage_crop.fanpage_track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect)
+            else:
+                face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect, args.track_mode, args.zoom_on_gesture)
     else:
         use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
         for i, video_path in enumerate(videos, start=1):

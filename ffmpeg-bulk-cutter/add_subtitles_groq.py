@@ -128,6 +128,20 @@ def transcribe_to_srt_hinglish_groq(video_path: Path, srt_path: Path, api_key: s
     return count, "hinglish-groq"
 
 
+def transcribe_to_srt_groq(video_path: Path, srt_path: Path, api_key: str, model: str = DEFAULT_GROQ_MODEL, language: str | None = None):
+    """Plain (non-Hinglish) .srt transcription via Groq - see get_words_groq."""
+    result = _groq_transcribe(video_path, api_key, model, word_timestamps=False, language=language, prompt=None)
+    silences = _detect_silences(video_path)
+    entries = []
+    for seg in result.get("segments", []):
+        start, end, text = seg.get("start"), seg.get("end"), seg.get("text", "")
+        if start is None or end is None or _in_silence(start, end, silences):
+            continue
+        entries.append((start, end, text))
+    count = write_srt(srt_path, entries)
+    return count, "groq"
+
+
 def process_video(video_path: Path, output_dir: Path, i: int, total: int, *, api_key: str, model: str,
                    caption_style: str, style: CaptionStyle, max_words: int, burn: bool, use_gpu_encode: bool):
     print(f"[{i}/{total}] Transcribing {video_path.name} (Groq, {model})...")

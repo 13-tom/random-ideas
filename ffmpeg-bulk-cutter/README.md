@@ -87,17 +87,20 @@ python add_subtitles.py clips -o subtitled --burn
   explicitly documented as experimental for Whisper-style models and was
   confirmed (via a user report) to cause audio/subtitle sync to drift by
   several seconds after a chunk boundary.
-- `--language hinglish --groq` switches to **Groq's paid hosted Whisper
-  API** instead of running the model locally - no torch/transformers
-  needed at all in this mode, real per-word timestamps come back directly
-  from the API (more accurate than the free path's proportional-timing
-  guess), and it's typically much faster since it's not running on your
-  own CPU. Needs an API key from [console.groq.com/keys](https://console.groq.com/keys)
-  (has its own free tier, but this flag is for when you want the paid/
-  faster option). Pass it with `--groq-api-key sk-...` or set a
-  `GROQ_API_KEY` environment variable so you don't have to pass it every
-  time. `--groq-model` picks the Groq-hosted model (default:
-  `whisper-large-v3-turbo`). **Known limitation:** Groq's checkpoint isn't
+- `--groq` switches to **Groq's paid hosted Whisper API** instead of
+  running the model locally, for **any** `--language` (`en`/`hi`/`auto`/
+  `hinglish`) - no torch/transformers needed at all in this mode, real
+  per-word timestamps come back directly from the API (more accurate than
+  the free path's proportional-timing guess), and it's typically much
+  faster since it's not running on your own CPU. Needs an API key from
+  [console.groq.com/keys](https://console.groq.com/keys) (has its own free
+  tier, but this flag is for when you want the paid/faster option). Pass
+  it with `--groq-api-key sk-...` or set a `GROQ_API_KEY` environment
+  variable so you don't have to pass it every time. `--groq-model` picks
+  the Groq-hosted model (default: `whisper-large-v3-turbo`). Plain
+  `en`/`hi`/`auto` transcription via Groq just requests that language
+  directly - no Hinglish-specific handling involved. `--language hinglish
+  --groq` **Known limitation:** Groq's checkpoint isn't
   fine-tuned for Hinglish the way the local Oriserve model is, so it needs
   a style-biasing prompt (baked in automatically) to get genuine
   transliteration instead of a straight English translation of the Hindi
@@ -252,6 +255,23 @@ to verify actual hand-detection *accuracy* (only the zoom mechanics, via
 a simulated detection signal) - worth keeping an eye on with your own
 footage, and let me know if real gestures aren't being picked up
 reliably.
+
+**`--track-mode fanpage`** - a calmer, tighter variant tuned for
+fanpage/clip-account style edits (see `fanpage_crop.py`):
+```
+python reframe.py clips -o reframed --aspect vertical --track-faces --track-mode fanpage
+```
+- Tighter zoom on a lone subject than the default `dynamic` mode.
+- Slower, steadier pan (bigger smoothing window) and a bigger deadzone, so
+  it holds still unless the subject truly moves - prioritizes stability
+  over quickly chasing movement.
+- Frames by **how many people are on screen**, not who's currently
+  talking: a single wide crop that's just big enough to fit everyone,
+  automatically easing out the moment a 2nd person enters frame and back
+  to the tight single-person crop once they leave - all in one smoothed
+  pass, not a jump cut between modes. Caps at the 2 most prominent
+  (largest/closest) faces, so a stray background face doesn't pull the
+  crop wide open.
 
 **Zooms in and frames with headroom, not just a raw aspect-ratio slice.**
 A crop that only just fits the target aspect ratio around the full source
@@ -482,3 +502,35 @@ It accepts the same `--language`, `--model`, `--caption-style` (and its
 font/color flags), and `--no-gpu` flags as `add_subtitles.py`, plus
 `--reencode` from `cut_clips.py` and `--aspect`/`--track-faces` from
 `reframe.py`.
+
+## Fanpage pipeline (`fanpage_pipeline.py`)
+
+A dedicated pipeline for fanpage/clip-account style edits — cut, crop to
+whoever's on screen with smooth subject tracking, then caption, in one
+command:
+
+```
+python fanpage_pipeline.py raw_video.mp4 timestamps.csv -o output \
+  --aspect vertical --language hinglish --caption-style highlight
+```
+
+This writes:
+- `output/clips/` — the cut clips
+- `output/jumpcut/` — silence removed (skipped unless `--remove-silence`)
+- `output/cropped/` — cropped to `--aspect` with fanpage-style subject tracking (always on — that's the point of this pipeline)
+- `output/captioned/` — caption files + `_captioned.mp4` videos, ready to post
+
+The crop step always uses `fanpage_crop.py`'s tracking (see "Smart
+subject-tracking" → `--track-mode fanpage` above): tight zoom on a lone
+subject, automatically easing out to a wider crop that fits everyone the
+moment a 2nd person enters frame, and back again when they leave.
+
+Accepts the same `--language`/`--model`/`--hinglish-model`/`--groq`,
+`--caption-style` (+ font/color flags), `--remove-silence`
+(+`--min-silence`/`--padding`/`--noise-db`), and `--no-gpu`/`--gpu-detect`
+flags as the other pipelines/scripts above.
+
+**Note on captions:** this currently just burns styled captions straight
+onto the cropped video (the same engine as `add_subtitles.py`
+`--caption-style`). The branded "Ntfp1" template (a specific layout - not
+built yet) will replace this final step once it exists.
