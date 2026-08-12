@@ -475,6 +475,61 @@ ratio (`force_original_aspect_ratio=decrease`), so anything landscape-ish
 works. Audio comes from the source clip, GPU/CPU encoding falls back
 automatically the same way every other script here does.
 
+## Ntfp1 template (`template_ntfp1.py`)
+
+A second reel template, matching a different reference layout than
+`template_compose.py`'s: a near-fullscreen video (not a boxed-off letterbox)
+with a plain grid-textured margin above it and a soft fade into the
+background at the bottom edge, instead of a hard cut.
+
+```
+python template_ntfp1.py clip.mp4 -o reel.mp4
+python template_ntfp1.py clips/ -o template_output --language hinglish
+```
+
+    +--------------------------+
+    |  plain black margin,      |  <- no heading text, just the faint
+    |  faint grid texture       |     grid texture
+    +--------------------------+
+    |                            |
+    |   video, cropped+tracked  |
+    |   to fill edge-to-edge -  |
+    |   auto-focus on whoever's |
+    |   on screen, zooms out    |
+    |   to fit both if 2 people |
+    |   are in frame            |
+    |   ...fades into the        |  <- soft gradient, not a hard edge
+    |      background here...   |
+    +--------------------------+
+    |  plain black margin        |
+    +--------------------------+
+
+The key difference from `template_compose.py`: that template letterboxes
+the **whole** source frame into a modest box (every pixel visible, nothing
+cropped). This one instead **crops** the source down to fill the
+near-fullscreen video box edge-to-edge, using `fanpage_crop.py`'s
+subject-aware tracking (see "Smart subject-tracking" → `--track-mode
+fanpage` above) - tight zoom on a lone subject, automatically widening to
+fit both people the moment a 2nd one enters frame.
+
+Layout constants (`CANVAS_W/H`, `VIDEO_Y`, `VIDEO_BOX_W/H`, `FADE_H`,
+`CAPTION_MARGIN_V`) are at the top of `template_ntfp1.py`, same
+edit-directly-or-don't-bother pattern as `template_compose.py`. Current
+values are estimated from the reference image's own proportions - plain
+top margin ~20% of the canvas, video ~75%, a ~140px fade at the bottom.
+Same `--language`/`--model`/`--hinglish-model`/`--groq`, `--caption-style`
+(+ font/color flags), `--caption-y`/`--caption-position`, and
+`--no-gpu`/`--gpu-detect` flags as `template_compose.py`.
+
+**How the fade is built:** the tracked/cropped video's alpha channel is
+merged (`alphamerge`) with a generated grayscale gradient mask - solid
+white (fully opaque) except the last `FADE_H` rows, which ramp linearly to
+black (fully transparent) - then overlaid onto the grid background, so
+ffmpeg's own alpha blending does the fade. Verified by pixel-sampling a
+rendered frame straight through the transition band: solid video color
+above the fade, a smooth linear blend down to the exact background color
+across it, solid background below - no seam.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, silence removal, reframing, and

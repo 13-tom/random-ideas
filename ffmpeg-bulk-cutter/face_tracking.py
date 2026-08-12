@@ -220,8 +220,11 @@ def _detect_faces_in_frame(landmarker, mp, frame_bgr):
     return _merge_detections(all_detections, merge_dist=0.08 * math.hypot(width, height))
 
 
-def crop_dimensions(aspect: str, src_w: int, src_h: int) -> tuple[int, int]:
-    ratio_w, ratio_h = ASPECT_RATIOS[aspect]
+def crop_dimensions(aspect, src_w: int, src_h: int) -> tuple[int, int]:
+    """aspect: either a named key into ASPECT_RATIOS, or a raw (ratio_w,
+    ratio_h) tuple for a one-off ratio not worth naming (e.g. a
+    template's own fixed video-box proportions)."""
+    ratio_w, ratio_h = ASPECT_RATIOS[aspect] if isinstance(aspect, str) else aspect
     crop_w = min(src_w, round(src_h * ratio_w / ratio_h))
     crop_h = min(src_h, round(src_w * ratio_h / ratio_w))
     crop_w -= crop_w % 2

@@ -123,12 +123,16 @@ def _build_group_path(samples, total_frames: int, fps: float):
     return list(zip(_smooth(interp_cx), _smooth(interp_cy), _smooth(interp_zoom)))
 
 
-def fanpage_track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res: str, use_gpu: bool,
+def fanpage_track_and_crop(input_path: Path, output_path: Path, aspect, target_res: str, use_gpu: bool,
                             static_crop_fallback, try_gpu_detect: bool = False) -> bool:
     """Crops to whoever's on screen: a tight single-person framing when
     only one face is detected, automatically easing out to a wider crop
     that fits everyone when a second person is in frame, and back again
     when they leave - all in one smoothed pass.
+
+    aspect: either a named key into reframe.ASPECT_RATIOS, or a raw
+    (ratio_w, ratio_h) tuple for a one-off ratio (e.g. a template's own
+    fixed video-box proportions) - see crop_dimensions().
 
     Returns True if smart tracking was used, False if it fell back to a
     static center crop via static_crop_fallback(input_path, output_path,
