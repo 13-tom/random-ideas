@@ -512,14 +512,33 @@ subject-aware tracking (see "Smart subject-tracking" → `--track-mode
 fanpage` above) - tight zoom on a lone subject, automatically widening to
 fit both people the moment a 2nd one enters frame.
 
-Layout constants (`CANVAS_W/H`, `VIDEO_Y`, `VIDEO_BOX_W/H`, `FADE_H`,
-`CAPTION_MARGIN_V`) are at the top of `template_ntfp1.py`, same
-edit-directly-or-don't-bother pattern as `template_compose.py`. Current
-values are estimated from the reference image's own proportions - plain
-top margin ~20% of the canvas, video ~75%, a ~140px fade at the bottom.
+**Adjust the layout yourself, without editing the file:**
+```
+python template_ntfp1.py clip.mp4 -o reel.mp4 --video-y 300 --video-h 1500 --fade-h 100
+```
+- `--video-y` — Y position (pixels from the canvas top) of the video box's
+  top edge. Raise it to make the plain top margin taller, lower it to
+  shrink the margin (default: `380`).
+- `--video-h` — height of the video box in pixels. Bigger = the video
+  takes up more of the canvas (default: `1450`).
+- `--fade-h` — height of the fade at the video's bottom edge, in pixels,
+  measured up from the video box's own bottom edge. `0` disables it for a
+  hard edge instead (default: `140`).
+- `--caption-y`/`--caption-position` — same as `template_compose.py`;
+  the default caption position automatically re-centers itself just above
+  the fade zone based on whatever `--video-y`/`--video-h`/`--fade-h` you
+  pass, so you only need `--caption-y` if you want it somewhere else.
+
+These same numbers are also the `DEFAULT_VIDEO_Y`/`DEFAULT_VIDEO_BOX_H`/
+`DEFAULT_FADE_H` constants at the top of `template_ntfp1.py`, if you'd
+rather change the file's own defaults once instead of passing flags every
+run. Current defaults are estimated from the reference image's own
+proportions - plain top margin ~20% of the canvas, video ~75%, a ~140px
+fade at the bottom.
+
 Same `--language`/`--model`/`--hinglish-model`/`--groq`, `--caption-style`
-(+ font/color flags), `--caption-y`/`--caption-position`, and
-`--no-gpu`/`--gpu-detect` flags as `template_compose.py`.
+(+ font/color flags), and `--no-gpu`/`--gpu-detect` flags as
+`template_compose.py`.
 
 **How the fade is built:** the tracked/cropped video's alpha channel is
 merged (`alphamerge`) with a generated grayscale gradient mask - solid

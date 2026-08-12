@@ -29,12 +29,14 @@ tight zoom on a lone subject, automatically easing out to a wider crop
 that fits both people when a 2nd one enters frame.
 
 All the layout numbers (margins, video box size, fade height) are plain
-constants right below this docstring - edit them directly to change the
-layout, no need to read the rest of the file.
+DEFAULT_* constants right below this docstring - either edit them
+directly, or override per-run with --video-y/--video-h/--fade-h/
+--caption-y/--caption-position (see --help) without touching the file.
 
 Usage:
     python template_ntfp1.py clip.mp4 -o reel.mp4
     python template_ntfp1.py clips/ -o template_output --language hinglish
+    python template_ntfp1.py clip.mp4 -o reel.mp4 --video-y 300 --video-h 1500 --fade-h 100
 """
 import argparse
 import os
@@ -56,9 +58,9 @@ from template_compose import _escape_subtitles_path, _gpu_error_reason, _run_wit
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
 # ============================================================================
-# LAYOUT SETTINGS - edit these directly to change the canvas, or override
-# per-run with --video-y/--video-h/--fade-h/--caption-y/--caption-position
-# (see --help) instead of editing the file.
+# LAYOUT SETTINGS - these are just the DEFAULTS. Either edit them directly
+# here, or override per-run with --video-y/--video-h/--fade-h/--caption-y/
+# --caption-position (see --help) without touching the file at all.
 # ============================================================================
 
 CANVAS_W = 1080
@@ -69,76 +71,81 @@ CANVAS_H = 1920
 # a plain top margin (~20% of the canvas), the video itself (~75%), and a
 # small bottom margin the video fades into (~5%).
 VIDEO_BOX_W = 1080
-VIDEO_BOX_H = 1450
-VIDEO_Y = 380                                        # y of the box's TOP edge
+DEFAULT_VIDEO_BOX_H = 1450
+DEFAULT_VIDEO_Y = 380                                # y of the box's TOP edge
 
 # Soft fade at the BOTTOM of the video into the background, instead of a
 # hard edge - height in pixels, measured up from the video box's own
 # bottom edge (so it blends into whatever's below, background or the
 # canvas edge).
-FADE_H = 140
+DEFAULT_FADE_H = 140
 
 BG_COLOR = "0x0d0d0d"
 GRID_SPACING = 54
 GRID_OPACITY = 0.05
 
-# Caption position: default sits inside the video's solid (non-faded)
-# area, comfortably above where the fade starts, so text never sits on
-# top of the fading edge. position="bottom" measures CAPTION_MARGIN_V as
-# the distance from the CANVAS bottom edge upward (ASS convention).
-CAPTION_MARGIN_V = (CANVAS_H - (VIDEO_Y + VIDEO_BOX_H - FADE_H)) + 40
-
 # ============================================================================
 
 
-def _fit_ratio() -> tuple[int, int]:
+def _default_caption_margin_v(video_y: int, video_box_h: int, fade_h: int) -> int:
+    """Caption position: default sits inside the video's solid (non-faded)
+    area, comfortably above where the fade starts, so text never sits on
+    top of the fading edge. position="bottom" measures the result as the
+    distance from the CANVAS bottom edge upward (ASS convention)."""
+    return (CANVAS_H - (video_y + video_box_h - fade_h)) + 40
+
+
+def _fit_ratio(video_box_h: int) -> tuple[int, int]:
     """The video box's own aspect ratio, as a raw (w, h) tuple - passed to
     fanpage_crop.py instead of a named reframe.py aspect, since this
     template's proportions are its own fixed thing, not one of the
     standard platform ratios."""
-    return VIDEO_BOX_W, VIDEO_BOX_H
+    return VIDEO_BOX_W, video_box_h
 
 
-def _center_crop_fallback(input_path: Path, output_path: Path, aspect, use_gpu: bool):
-    """Passed into fanpage_crop.fanpage_track_and_crop as its
-    static_crop_fallback - used only if literally no faces are found
-    anywhere in the clip. A plain centered crop+scale to the video box's
-    exact size (aspect/use_gpu params kept for call-shape compatibility,
-    even though use_gpu isn't used here - the crop+scale is cheap enough
-    on CPU that a GPU encode fallback dance isn't worth the complexity)."""
-    vf = (
-        f"crop='min(iw,ih*{VIDEO_BOX_W}/{VIDEO_BOX_H})':'min(ih,iw*{VIDEO_BOX_H}/{VIDEO_BOX_W})',"
-        f"scale={VIDEO_BOX_W}:{VIDEO_BOX_H}:flags=lanczos"
-    )
-    subprocess.run(["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf,
-                     "-c:v", "libx264", "-c:a", "copy", str(output_path)], check=True)
+def _center_crop_fallback(video_box_h: int):
+    """Returns a static_crop_fallback callable (input_path, output_path,
+    aspect, use_gpu) for fanpage_crop.fanpage_track_and_crop - used only
+    if literally no faces are found anywhere in the clip. A plain centered
+    crop+scale to the video box's exact size (aspect/use_gpu params kept
+    for call-shape compatibility, even though use_gpu isn't used here -
+    the crop+scale is cheap enough on CPU that a GPU encode fallback dance
+    isn't worth the complexity)."""
+    def _fallback(input_path: Path, output_path: Path, aspect, use_gpu: bool):
+        vf = (
+            f"crop='min(iw,ih*{VIDEO_BOX_W}/{video_box_h})':'min(ih,iw*{video_box_h}/{VIDEO_BOX_W})',"
+            f"scale={VIDEO_BOX_W}:{video_box_h}:flags=lanczos"
+        )
+        subprocess.run(["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf,
+                         "-c:v", "libx264", "-c:a", "copy", str(output_path)], check=True)
+    return _fallback
 
 
-def _make_fade_mask(mask_path: Path):
+def _make_fade_mask(mask_path: Path, video_box_h: int, fade_h: int):
     """A grayscale gradient image the exact size of the video box: solid
-    white (opaque) everywhere except the last FADE_H rows, which ramp
+    white (opaque) everywhere except the last fade_h rows, which ramp
     linearly down to black (transparent). Merged onto the tracked video's
     alpha channel via ffmpeg's alphamerge filter to fade its bottom edge
     into the background - verified empirically (pixel-sampled a rendered
     frame through the transition) to blend smoothly with no seam."""
-    column = np.full(VIDEO_BOX_H, 255, dtype=np.uint8)
-    if FADE_H > 0:
-        column[VIDEO_BOX_H - FADE_H:] = np.linspace(255, 0, FADE_H, dtype=np.uint8)
+    column = np.full(video_box_h, 255, dtype=np.uint8)
+    if fade_h > 0:
+        column[video_box_h - fade_h:] = np.linspace(255, 0, fade_h, dtype=np.uint8)
     mask = np.tile(column[:, None], (1, VIDEO_BOX_W))
     cv2.imwrite(str(mask_path), mask)
 
 
-def track_and_crop(input_path: Path, tracked_path: Path, use_gpu: bool, gpu_detect: bool):
+def track_and_crop(input_path: Path, tracked_path: Path, video_box_h: int, use_gpu: bool, gpu_detect: bool):
     """Step: crop the source down to the video box's exact size, following
     whoever's on screen (fanpage_crop.py - see its docstring for the
     tracking behavior)."""
     fanpage_crop.fanpage_track_and_crop(
-        input_path, tracked_path, _fit_ratio(), f"{VIDEO_BOX_W}x{VIDEO_BOX_H}",
-        use_gpu, _center_crop_fallback, gpu_detect,
+        input_path, tracked_path, _fit_ratio(video_box_h), f"{VIDEO_BOX_W}x{video_box_h}",
+        use_gpu, _center_crop_fallback(video_box_h), gpu_detect,
     )
 
 
-def compose_frame(tracked_path: Path, mask_path: Path, framed_path: Path, duration: float, use_gpu: bool):
+def compose_frame(tracked_path: Path, mask_path: Path, framed_path: Path, duration: float, video_y: int, use_gpu: bool):
     """Step: build the grid-textured background, fade the tracked video's
     bottom edge into it via the gradient mask, and composite. No captions
     yet - that's a separate burn pass once we know the caption text/timing."""
@@ -148,7 +155,7 @@ def compose_frame(tracked_path: Path, mask_path: Path, framed_path: Path, durati
         f"[2:v]format=gray[grad];"
         f"[0:v]format=yuva420p[vidrgba];"
         f"[vidrgba][grad]alphamerge[vidfaded];"
-        f"[bg][vidfaded]overlay=x=0:y={VIDEO_Y}[outv]"
+        f"[bg][vidfaded]overlay=x=0:y={video_y}[outv]"
     )
     base_cmd = [
         "ffmpeg", "-y", "-nostdin",
@@ -175,9 +182,9 @@ def process_video(video_path: Path, output_dir: Path, mask_path: Path, i: int, t
     tracked_path = Path(tracked_path_str)
     framed_path = output_dir / f"{video_path.stem}_framed.mp4"
     try:
-        track_and_crop(video_path, tracked_path, use_gpu_encode, args.gpu_detect)
+        track_and_crop(video_path, tracked_path, args.video_h, use_gpu_encode, args.gpu_detect)
         duration = get_media_duration(tracked_path)
-        compose_frame(tracked_path, mask_path, framed_path, duration, use_gpu_encode)
+        compose_frame(tracked_path, mask_path, framed_path, duration, args.video_y, use_gpu_encode)
     finally:
         tracked_path.unlink(missing_ok=True)
 
@@ -248,8 +255,11 @@ def main():
     parser.add_argument("--all-caps", action="store_true", help="ALL CAPS captions")
     parser.add_argument("--box", action="store_true", help="Highlight the active caption word with a solid colored box instead of colored text")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen caption line (default: 5)")
+    parser.add_argument("--video-y", type=int, default=DEFAULT_VIDEO_Y, help=f"Y position (pixels from canvas top) of the video box's top edge - raise this to make the plain top margin taller, lower it to shrink the margin (default: {DEFAULT_VIDEO_Y})")
+    parser.add_argument("--video-h", type=int, default=DEFAULT_VIDEO_BOX_H, help=f"Height (pixels) of the video box - bigger = video takes up more of the canvas (default: {DEFAULT_VIDEO_BOX_H})")
+    parser.add_argument("--fade-h", type=int, default=DEFAULT_FADE_H, help=f"Height (pixels) of the fade at the video's bottom edge, measured up from the video box's own bottom - 0 disables the fade for a hard edge (default: {DEFAULT_FADE_H})")
     parser.add_argument("--caption-position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical anchor for captions (default: bottom - sits inside the video's solid area, above the fade)")
-    parser.add_argument("--caption-y", type=int, default=None, help=f"Manually override the caption's vertical position in pixels, instead of editing CAPTION_MARGIN_V in the script. Meaning depends on --caption-position. Default: {CAPTION_MARGIN_V}")
+    parser.add_argument("--caption-y", type=int, default=None, help="Manually override the caption's vertical position in pixels, instead of using the default (which auto-adjusts to sit just above the fade zone based on --video-y/--video-h/--fade-h). Meaning depends on --caption-position.")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
     parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language. See add_subtitles.py --help for details.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
@@ -261,6 +271,12 @@ def main():
     if not args.input.exists():
         sys.exit(f"Input not found: {args.input}")
 
+    if args.video_y < 0 or args.video_h <= 0 or args.video_y + args.video_h > CANVAS_H:
+        sys.exit(f"--video-y/--video-h must fit within the {CANVAS_H}px canvas (got video_y={args.video_y}, video_h={args.video_h}, bottom edge={args.video_y + args.video_h})")
+    if args.fade_h < 0 or args.fade_h > args.video_h:
+        sys.exit(f"--fade-h must be between 0 and --video-h ({args.video_h}), got {args.fade_h}")
+
+    default_caption_margin_v = _default_caption_margin_v(args.video_y, args.video_h, args.fade_h)
     try:
         caption_style = CaptionStyle(
             font=args.font, font_size=args.font_size,
@@ -268,7 +284,7 @@ def main():
             outline_rgb=parse_color(args.outline_color), outline_width=args.outline_width,
             bold=not args.no_bold, italic=args.italic, all_caps=args.all_caps,
             box=args.box, position=args.caption_position,
-            margin_v=args.caption_y if args.caption_y is not None else CAPTION_MARGIN_V,
+            margin_v=args.caption_y if args.caption_y is not None else default_caption_margin_v,
         )
     except ValueError as e:
         sys.exit(str(e))
@@ -282,7 +298,7 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     mask_path = args.output_dir / ".ntfp1_fade_mask.png"
-    _make_fade_mask(mask_path)
+    _make_fade_mask(mask_path, args.video_h, args.fade_h)
 
     gpu_requested = not args.no_gpu
     use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
