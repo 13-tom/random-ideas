@@ -549,6 +549,57 @@ rendered frame straight through the transition band: solid video color
 above the fade, a smooth linear blend down to the exact background color
 across it, solid background below - no seam.
 
+## Ntfb2-blur template (`template_ntfb2_blur.py`)
+
+A third reel template: the classic "blurred backdrop" look (Spotify
+Canvas / reposted landscape clips) - the full landscape video plays at
+readable size in the middle, letterboxed (nothing cropped, every pixel of
+the source visible), with the *same* video running behind it full-frame,
+scaled up to cover the whole canvas and blurred, instead of a plain color
+or grid background.
+
+```
+python template_ntfb2_blur.py clip.mp4 -o reel.mp4
+python template_ntfb2_blur.py clips/ -o template_output --language hinglish
+python template_ntfb2_blur.py clip.mp4 -o reel.mp4 --blur-sigma 30 --video-y 500
+```
+
+    +--------------------------+
+    |  same video, blurred and  |
+    |  scaled to fill the       |
+    |  whole canvas             |
+    +--------------------------+
+    |                            |
+    |   the SAME video again,   |  <- sharp, full landscape frame,
+    |   sharp, at native aspect |     nothing cropped
+    |   ratio (letterboxed)     |
+    |                            |
+    +--------------------------+
+    |  blurred video continues  |
+    +--------------------------+
+
+Both layers come from the **same** input stream - ffmpeg splits it
+internally when referenced twice in one filter graph, so there's no
+separately-generated background to keep in sync, and no frame-rate-
+mismatch/timing-drift class of bug possible here by construction (unlike
+`template_compose.py`/`template_ntfp1.py`, which do need to match a
+generated background's frame rate to the source's).
+
+- `--blur-sigma` — background blur strength, bigger = blurrier (default:
+  `20`). Uses `gblur` (Gaussian), not a pixel-radius box blur, so it stays
+  smooth at any strength instead of looking blocky.
+- `--video-y` — Y position (pixels from canvas top) of the sharp video's
+  top edge. Default: vertically centered, computed by ffmpeg at runtime so
+  it's correct for any source aspect ratio, not just 16:9.
+- `--caption-y`/`--caption-position` — same as the other templates; default
+  sits in the blurred margin below the sharp video.
+- No face tracking involved (the video isn't cropped, just letterboxed +
+  blurred), so this template doesn't need opencv/mediapipe at all -
+  lighter dependency footprint than `template_ntfp1.py`.
+
+Same `--language`/`--model`/`--hinglish-model`/`--groq`, `--caption-style`
+(+ font/color flags), and `--no-gpu` flags as the other templates.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, silence removal, reframing, and
