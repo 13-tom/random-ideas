@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const viewport = document.getElementById("viewport");
 const statusText = document.getElementById("status-text");
@@ -12,39 +13,40 @@ const btnReset = document.getElementById("btn-reset");
 const btnAutorotate = document.getElementById("btn-autorotate");
 const btnFullscreen = document.getElementById("btn-fullscreen");
 
+const MODEL_URL = "models/heart.glb";
+
 /**
- * NOTE FOR THE TEACHER / DEVELOPER:
- * The heart below is a stylized, procedurally-extruded shape used to
- * demonstrate the touch interaction pattern (rotate / zoom / tap-hotspot)
- * on a digital board. It is NOT anatomically precise. For classroom use,
- * swap `buildHeartMesh()` for a loaded .glb/.gltf anatomical model (see
- * README.md) and keep the same hotspot + info-panel wiring.
+ * Coordinates are in the model's own local space (it loads already centered
+ * near the origin) and were picked by raycasting against the real mesh from
+ * several front-view screen positions, so each dot sits exactly on the
+ * surface feature it names. Source model: NIH 3D Print Exchange, "Human
+ * Heart 3d Model" (3DPX-022787), Public Domain / CC0. See README.md.
  */
 const HOTSPOTS = [
   {
-    u: 0.03,
-    title: "Great Vessels (Aorta / Pulmonary Trunk)",
-    body: "The large arteries at the top of the heart, between the two atria, that carry blood away toward the body and lungs.",
+    position: [0.0472, 0.4482, 0.2069],
+    title: "Great Vessels (Aorta / Pulmonary Artery)",
+    body: "The large arteries at the top of the heart that carry blood away toward the body and lungs.",
   },
   {
-    u: 0.18,
-    title: "Left Ventricle",
+    position: [0.112, 0.1191, 0.1868],
+    title: "Atria (Pulmonary Vein Region)",
+    body: "The upper chambers where blood enters the heart — the left atrium receives oxygen-rich blood from the lungs here.",
+  },
+  {
+    position: [0.0565, -0.1131, 0.2888],
+    title: "Left Ventricle (Anterior Surface)",
     body: "The heart's main pumping chamber — thick, muscular walls push oxygenated blood out through the aorta to the whole body.",
   },
   {
-    u: 0.4,
-    title: "Left Atrium",
-    body: "Receives oxygen-rich blood from the lungs via the pulmonary veins, then passes it to the left ventricle.",
+    position: [-0.0931, -0.1164, 0.2332],
+    title: "Coronary Arteries",
+    body: "The vessels running across the heart's own surface that supply the heart muscle itself with oxygenated blood.",
   },
   {
-    u: 0.63,
-    title: "Right Atrium",
-    body: "Receives deoxygenated blood returning from the body via the vena cava, then passes it to the right ventricle.",
-  },
-  {
-    u: 0.85,
-    title: "Right Ventricle",
-    body: "Pumps deoxygenated blood into the pulmonary artery, toward the lungs.",
+    position: [0.0349, -0.4648, 0.2362],
+    title: "Inferior Vena Cava / Apex Region",
+    body: "Near the bottom (apex) of the heart, where the great vein returning blood from the lower body enters the right atrium.",
   },
 ];
 
@@ -70,74 +72,15 @@ function hasWebGL() {
   }
 }
 
-function buildHeartShape() {
-  const shape = new THREE.Shape();
-  const x = 0;
-  const y = 0;
-  shape.moveTo(x + 5, y + 5);
-  shape.bezierCurveTo(x + 5, y + 5, x + 4, y, x, y);
-  shape.bezierCurveTo(x - 6, y, x - 6, y + 7, x - 6, y + 7);
-  shape.bezierCurveTo(x - 6, y + 11, x - 3, y + 15.4, x + 5, y + 19);
-  shape.bezierCurveTo(x + 12, y + 15.4, x + 16, y + 11, x + 16, y + 7);
-  shape.bezierCurveTo(x + 16, y + 7, x + 16, y, x + 10, y);
-  shape.bezierCurveTo(x + 7, y, x + 5, y + 5, x + 5, y + 5);
-  return shape;
-}
-
-function buildHeartMesh() {
-  const shape = buildHeartShape();
-  const extrudeSettings = {
-    depth: 6,
-    bevelEnabled: true,
-    bevelThickness: 1.2,
-    bevelSize: 1,
-    bevelSegments: 6,
-    curveSegments: 32,
-  };
-
-  const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-  geometry.computeBoundingBox();
-  const center = new THREE.Vector3();
-  geometry.boundingBox.getCenter(center);
-  geometry.translate(-center.x, -center.y, -center.z);
-  geometry.computeVertexNormals();
-  geometry.scale(0.28, 0.28, 0.28);
-  center.multiplyScalar(0.28);
-
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xd6455c,
-    roughness: 0.45,
-    metalness: 0.05,
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.rotation.z = Math.PI; // point (apex) downward like a real heart
-
-  const frontZ = (extrudeSettings.depth + extrudeSettings.bevelThickness) * 0.28 - center.z;
-  const curve = shape.getSpacedPoints(400);
-
-  return { mesh, shape, frontZ, center };
-}
-
-function addHotspots(mesh, shape, frontZ) {
-  const group = new THREE.Group();
-  mesh.add(group);
-
+function addHotspots(parent) {
   HOTSPOTS.forEach((spot) => {
-    const p = shape.getPointAt(spot.u);
-    const local = new THREE.Vector3(
-      (p.x - 5) * 0.28,
-      (p.y - 9.5) * 0.28,
-      frontZ
-    );
-
     const el = document.createElement("div");
     el.className = "hotspot";
     el.title = spot.title;
 
     const marker = new CSS2DObject(el);
-    marker.position.copy(local);
-    group.add(marker);
+    marker.position.set(...spot.position);
+    parent.add(marker);
 
     el.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -150,9 +93,6 @@ function addHotspots(mesh, shape, frontZ) {
       infoPanel.style.display = "block";
     });
   });
-
-  // rotation.z = PI on the parent mesh flips local group children too,
-  // so hotspots stay attached to the correct visual location automatically.
 }
 
 function init() {
@@ -169,10 +109,10 @@ function init() {
   const camera = new THREE.PerspectiveCamera(
     45,
     viewport.clientWidth / viewport.clientHeight,
-    0.1,
+    0.01,
     100
   );
-  camera.position.set(0, 0, 9);
+  camera.position.set(0, 0, 2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -187,28 +127,22 @@ function init() {
   labelRenderer.domElement.style.pointerEvents = "none";
   viewport.appendChild(labelRenderer.domElement);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(4, 6, 8);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x88aaff, 0.5);
+  const rim = new THREE.DirectionalLight(0x88aaff, 0.6);
   rim.position.set(-6, -3, -4);
   scene.add(rim);
-
-  const { mesh, shape, frontZ } = buildHeartMesh();
-  scene.add(mesh);
-  addHotspots(mesh, shape, frontZ);
 
   const controls = new OrbitControls(camera, labelRenderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 4;
-  controls.maxDistance = 20;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 1.4;
   controls.target.set(0, 0, 0);
 
-  const initialCameraPos = camera.position.clone();
+  let initialCameraPos = camera.position.clone();
 
   btnReset.addEventListener("click", () => {
     camera.position.copy(initialCameraPos);
@@ -258,9 +192,41 @@ function init() {
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
   }
-
-  statusText.textContent = "Heart model ready — stylized schematic demo.";
   animate();
+
+  statusText.textContent = "Loading heart model…";
+  new GLTFLoader().load(
+    MODEL_URL,
+    (gltf) => {
+      const model = gltf.scene;
+      scene.add(model);
+      addHotspots(model);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+      camera.near = maxDim / 100;
+      camera.far = maxDim * 20;
+      camera.position.set(0, 0, maxDim * 1.7);
+      camera.updateProjectionMatrix();
+      controls.minDistance = maxDim * 0.5;
+      controls.maxDistance = maxDim * 6;
+      controls.update();
+      initialCameraPos = camera.position.clone();
+
+      statusText.textContent =
+        "Heart model ready — source: NIH 3D Print Exchange (3DPX-022787), Public Domain.";
+    },
+    undefined,
+    (err) => {
+      console.error(err);
+      showError(
+        "Could not load the 3D heart model (models/heart.glb). Check that the file exists and that you're serving this folder over http:// (not opening index.html directly from disk)."
+      );
+    }
+  );
 }
 
 try {
