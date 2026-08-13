@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enum support in Prisma, so match type is a plain
+// String constrained to "CONTAINS" | "EXACT" | "STARTS_WITH" at the API layer (zod).
+model KeywordRule {
+  id        String   @id @default(cuid())
+  keyword   String
+  matchType String   @default("CONTAINS")
+  replyText String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CommentRule {
+  id              String   @id @default(cuid())
+  // Restrict to a specific post/reel; null means "any post"
+  mediaId         String?
+  keyword         String
+  matchType       String   @default("CONTAINS")
+  dmText          String
+  // Optional public reply left on the comment itself, in addition to the DM
+  publicReplyText String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model WelcomeMessage {
+  id        String   @id @default(cuid())
+  text      String
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+model Flow {
+  id             String     @id @default(cuid())
+  name           String
+  triggerKeyword String
+  triggerMatch   String     @default("CONTAINS")
+  isActive       Boolean    @default(true)
+  steps          FlowStep[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model FlowStep {
+  id           String  @id @default(cuid())
+  flow         Flow    @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  flowId       String
+  // 0-based order within the flow
+  order        Int
+  messageText  String
+  // JSON array of { title: string, payload: string } shown as quick replies.
+  // `payload` holds the order of the FlowStep this button leads to.
+  quickReplies String?
+
+  @@unique([flowId, order])
+}
+
+model Conversation {
+  id                String    @id @default(cuid())
+  igUserId          String    @unique
+  hasReceivedWelcome Boolean  @default(false)
+  activeFlowId      String?
+  activeFlowStep    Int?
+  lastInteractionAt DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+}
+
+model MessageLog {
+  id        String   @id @default(cuid())
+  igUserId  String
+  direction String // "inbound" | "outbound"
+  text      String?
+  meta      String? // JSON blob for extra context (payload, rule id, etc.)
+  createdAt DateTime @default(now())
+}
