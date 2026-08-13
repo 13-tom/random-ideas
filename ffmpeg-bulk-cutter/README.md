@@ -600,44 +600,54 @@ generated background's frame rate to the source's).
 Same `--language`/`--model`/`--hinglish-model`/`--groq`, `--caption-style`
 (+ font/color flags), and `--no-gpu` flags as the other templates.
 
-## Logo template (`template_logo.py`)
+## Adding a logo/watermark (`add_logo.py`)
 
-A copy of `template_compose.py` with one difference: a PNG logo image
-sits left-aligned in the plain top margin above the video, instead of that
-space staying empty.
+A plain watermark/branding pass, nothing else: stamps a PNG logo onto a
+video (or a whole folder of videos) at a fixed position and size. Doesn't
+touch aspect ratio, resolution, or captions - whatever the source video
+already is (already-edited reels, landscape footage, anything), that's
+what comes out, just with the logo overlaid on top. Not a compose
+template like the others above - this is a lightweight bulk-processing
+tool for videos you've already finished.
 
 ```
-python template_logo.py clip.mp4 -o reel.mp4 --logo brand1
-python template_logo.py clip.mp4 -o reel.mp4 --logo /path/to/any_logo.png
-python template_logo.py clips/ -o template_output --logo brand2 --language hinglish
-python template_logo.py clip.mp4 -o reel.mp4 --logo brand1 --logo-width 300 --logo-x 80 --logo-y 40
+python add_logo.py clip.mp4 -o branded.mp4 --logo brand1
+python add_logo.py clips/ -o branded_clips --logo brand2
+python add_logo.py clip.mp4 -o branded.mp4 --logo /path/to/any_logo.png
+python add_logo.py clips/ -o out --logo brand1 --logo-width 300 --logo-x 80 --logo-y 40
 ```
 
 **Use PNG, not JPG.** PNG supports a transparent background (an alpha
-channel) so the logo shows up as a clean cutout over the grid background -
-a JPG version would come with a solid rectangle around it, since JPG has
-no transparency. Verified this directly: overlaid a PNG with a
-transparent background onto a test video and confirmed the surrounding
-pixels show the background through, not a box.
+channel) so the logo composites as a clean cutout - a JPG version would
+come with a solid rectangle around it, since JPG has no transparency.
+Verified this directly: overlaid a transparent PNG onto a test video and
+confirmed the surrounding pixels show the video through, not a box.
 
 **Picking between your 5 logos:** register each one as a named preset in
-`LOGO_PRESETS` at the top of `template_logo.py` (just add a `"name":
+`LOGO_PRESETS` at the top of `add_logo.py` (just add a `"name":
 "/path/to/logo.png"` line), then select one per run with `--logo name`.
 `--logo` also accepts a raw file path directly, so presets are a
-convenience, not a requirement - handy if you want to switch logos
-without remembering full paths, or just pass whichever file you're using
-that day.
+convenience, not a requirement.
 
 - `--logo-width` — logo width in pixels; height is scaled automatically
   to preserve its own aspect ratio, never stretched (default: `240`).
-- `--logo-x` — distance from the canvas's left edge (default: `60`).
-- `--logo-y` — distance from the canvas's top edge. Default: vertically
-  centered within the top margin above the video.
+- `--logo-x` — distance from the video's left edge (default: `40`).
+- `--logo-y` — distance from the video's top edge (default: `40`).
 
-Everything else (video box size/position, background grid, caption
-placement) is identical to `template_compose.py` - same `--language`/
-`--model`/`--hinglish-model`/`--groq`, `--caption-style` (+ font/color
-flags), `--caption-y`/`--caption-position`, `--zoom`, and `--no-gpu` flags.
+These are also the `DEFAULT_LOGO_WIDTH`/`DEFAULT_LOGO_X`/`DEFAULT_LOGO_Y`
+constants at the top of `add_logo.py`, if you'd rather change the
+defaults once instead of passing flags every run. They're in pixels
+relative to each source video's own frame (this script doesn't
+resize/recompose anything), so re-check them if your clips vary a lot in
+resolution.
+
+**A real bug caught while building this:** `-shortest` alone doesn't
+reliably terminate output when one input is a `-loop 1` still image (its
+duration is effectively undefined to ffmpeg) - confirmed this directly
+when a real encode hung, burning CPU for minutes on a 1.5-second test
+clip instead of finishing instantly. Fixed by passing `-t` explicitly,
+bound to the real source video's own duration, instead of relying on
+`-shortest` to cut the output off.
 
 ## Full pipeline (one command)
 
