@@ -1,0 +1,228 @@
+:root {
+  --bg: #0f1720;
+  --panel: #16212c;
+  --panel-border: #24333f;
+  --accent: #ff5470;
+  --accent-soft: rgba(255, 84, 112, 0.18);
+  --text: #eef3f7;
+  --text-dim: #93a4b3;
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.brand-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+
+.organ-switcher {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.organ-btn {
+  padding: 10px 18px;
+  font-size: 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.organ-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.organ-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-btn {
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent);
+}
+
+/* ---------- Stage ---------- */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+}
+
+#viewport canvas {
+  display: block;
+  touch-action: none;
+}
+
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 32, 0.75);
+  border: 1px solid var(--panel-border);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ---------- Hotspot markers (CSS2D) ---------- */
+
+.hotspot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  min-width: 22px;
+  min-height: 22px;
+}
+
+.hotspot.selected {
+  background: #fff;
+  border-color: var(--accent);
+}
+
+/* ---------- Info panel ---------- */
+
+.info-panel {
+  display: none;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: min(340px, 80vw);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 20px 20px 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.info-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  padding-right: 24px;
+}
+
+.info-panel p {
+  margin: 0;
+  color: var(--text-dim);
+  line-height: 1.5;
+  font-size: 0.98rem;
+}
+
+.info-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ---------- Status bar ---------- */
+
+.statusbar {
+  padding: 8px 20px;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-border);
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 640px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .info-panel {
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Anatomy 3D Explorer — Heart</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><text y=%2224%22 font-size=%2224%22>%E2%9D%A4%EF%B8%8F</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span>Anatomy 3D Explorer</span>
+    </div>
+    <div class="organ-switcher" id="organ-switcher">
+      <button class="organ-btn active" data-organ="heart">Heart</button>
+      <button class="organ-btn" data-organ="lungs" disabled title="Coming soon">Lungs</button>
+      <button class="organ-btn" data-organ="brain" disabled title="Coming soon">Brain</button>
+      <button class="organ-btn" data-organ="kidneys" disabled title="Coming soon">Kidneys</button>
+    </div>
+    <div class="actions">
+      <button id="btn-reset" class="icon-btn" title="Reset view">Reset</button>
+      <button id="btn-autorotate" class="icon-btn" title="Toggle auto-rotate">Auto-rotate: On</button>
+      <button id="btn-fullscreen" class="icon-btn" title="Toggle fullscreen">Fullscreen</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div id="viewport"></div>
+
+    <div class="hint" id="hint">
+      Drag / one finger to rotate &nbsp;•&nbsp; Scroll or pinch to zoom &nbsp;•&nbsp; Tap a dot for details
+    </div>
+
+    <aside class="info-panel" id="info-panel" aria-live="polite">
+      <button class="info-close" id="info-close" aria-label="Close">&times;</button>
+      <h2 id="info-title">Select a part</h2>
+      <p id="info-body">Tap any labeled dot on the model to see details about that structure here.</p>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status-text">Loading model…</span>
+  </footer>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/controls/OrbitControls.js": "./vendor/three/controls/OrbitControls.js",
+      "three/addons/renderers/CSS2DRenderer.js": "./vendor/three/renderers/CSS2DRenderer.js"
+    }
+  }
+  </script>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
