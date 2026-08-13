@@ -44,9 +44,17 @@ npm run dev
 
 The server listens on `PORT` (default `3000`). For Meta to reach your webhook locally, tunnel it (e.g. `ngrok http 3000`) and use the tunnel URL in the webhook config.
 
-## 3. Configuring automations
+## 3. Admin dashboard
 
-There's no admin UI yet — manage rules via the REST API (e.g. with `curl`, Postman, or Insomnia):
+A plain HTML/CSS/JS page (no framework, no build step — served as static files) at `/admin` lets you manage everything below without touching the API by hand: keyword rules, comment rules, the welcome message, flows, scheduled posts, and the message log.
+
+It's gated by HTTP Basic Auth — set `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env` (also required for the `/api/*` routes themselves; both respond `503` until these are set). Visit `http://localhost:3000/admin/` and log in with those credentials when your browser prompts.
+
+> ponytail note: this is a single shared admin credential, not per-user accounts — right for one operator. If more than one person needs access, that's the point to add real auth (hashed passwords, sessions, roles).
+
+## 4. Configuring automations
+
+Everything below is also reachable directly via REST (e.g. with `curl`, Postman, or Insomnia) if you'd rather script it than use the dashboard — every request needs the same `ADMIN_USERNAME`/`ADMIN_PASSWORD` as Basic Auth (`curl -u admin:yourpassword ...`):
 
 | Resource | Endpoints |
 |---|---|
@@ -55,11 +63,12 @@ There's no admin UI yet — manage rules via the REST API (e.g. with `curl`, Pos
 | Welcome message | `GET/PUT /api/welcome-message` |
 | Flows | `GET/POST /api/flows`, `PATCH/DELETE /api/flows/:id` |
 | Scheduled posts | `GET/POST /api/scheduled-posts`, `GET /api/scheduled-posts/:id`, `DELETE /api/scheduled-posts/:id`, `POST /api/scheduled-posts/process-due` |
+| Message log | `GET /api/message-logs`, optional `?igUserId=`, `?limit=` (default 200, max 500) |
 
 Example — auto-reply to "price":
 
 ```bash
-curl -X POST localhost:3000/api/keyword-rules \
+curl -u admin:yourpassword -X POST localhost:3000/api/keyword-rules \
   -H 'Content-Type: application/json' \
   -d '{"keyword":"price","matchType":"CONTAINS","replyText":"Our starter plan is $29/mo! Want the full price list?"}'
 ```
@@ -67,7 +76,7 @@ curl -X POST localhost:3000/api/keyword-rules \
 Example — comment "PRICE" on any post → private DM:
 
 ```bash
-curl -X POST localhost:3000/api/comment-rules \
+curl -u admin:yourpassword -X POST localhost:3000/api/comment-rules \
   -H 'Content-Type: application/json' \
   -d '{"keyword":"price","dmText":"Hey! Here'\''s our price list: ...","publicReplyText":"Sent you a DM! 📩"}'
 ```
@@ -75,7 +84,7 @@ curl -X POST localhost:3000/api/comment-rules \
 Example — a 2-step flow triggered by "start":
 
 ```bash
-curl -X POST localhost:3000/api/flows \
+curl -u admin:yourpassword -X POST localhost:3000/api/flows \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Onboarding",
@@ -93,7 +102,7 @@ Each quick reply's `payload` is the `order` of the step it should jump to.
 Example — schedule a reel to publish in an hour:
 
 ```bash
-curl -X POST localhost:3000/api/scheduled-posts \
+curl -u admin:yourpassword -X POST localhost:3000/api/scheduled-posts \
   -H 'Content-Type: application/json' \
   -d '{
     "mediaType": "REELS",
@@ -107,19 +116,22 @@ curl -X POST localhost:3000/api/scheduled-posts \
 
 Note: Instagram enforces a rolling **~25 posts per 24 hours** limit per account via this API.
 
-## 4. How it works
+## 5. How it works
 
 - `src/webhooks/instagramWebhook.ts` — verifies the webhook handshake and each event's `X-Hub-Signature-256`, then dispatches messaging events and comment changes.
 - `src/automation/messageHandler.ts` — priority order per inbound DM: continue an in-progress flow → send welcome (first contact) → start a newly triggered flow → fall back to keyword auto-reply.
 - `src/automation/commentHandler.ts` — matches inbound comments against `CommentRule`s and sends a private-reply DM (+ optional public reply).
 - `src/automation/flowEngine.ts` — encodes/decodes quick-reply payloads as `FLOW:<flowId>:<stepOrder>` and advances a user's `Conversation.activeFlowId/activeFlowStep`.
 - `src/posting/postingService.ts` — each scheduler tick, creates a media container for any `ScheduledPost` whose `scheduledFor` has passed, then publishes any container Meta reports as `FINISHED`. `src/posting/scheduler.ts` runs this once a minute; `POST /api/scheduled-posts/process-due` runs it on demand.
+- `src/middleware/basicAuth.ts` — gates `/admin` and every `/api/*` route behind one shared admin credential (fails closed with `503` if unset).
+- `public/` — the admin dashboard itself: static `index.html` + `styles.css` + `app.js`, no build step, calling the same `/api/*` routes documented above.
 - All rules, flows, conversations, message logs, and scheduled posts live in SQLite via Prisma (`prisma/schema.prisma`). Swap `DATABASE_URL` for a Postgres connection string and re-run `prisma migrate` to move to Postgres later — no code changes needed.
 
 ## Roadmap
 
 Not built yet:
 
-- **Admin UI** — everything above is managed via the REST API only (curl/Postman); a simple web dashboard would make rule/flow/post management much friendlier.
 - **Stories** — the container→publish flow also supports Stories (`media_type: STORIES`); not wired up yet.
 - **Retry/backoff for failed posts** — a `FAILED` scheduled post currently stays failed; a manual re-publish endpoint or automatic retry would help with transient Graph API errors.
+- **Multi-user admin accounts** — today it's one shared username/password; real auth (hashed passwords, sessions, per-user roles) would be needed for more than one operator.
+- **Postgres, hosting, Meta App Review** — see the full production roadmap discussed separately for what's left to run this for real, non-tester Instagram accounts.
