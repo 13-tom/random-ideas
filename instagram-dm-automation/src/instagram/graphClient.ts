@@ -50,3 +50,44 @@ export async function sendPrivateReplyToComment(commentId: string, text: string)
 export async function replyToComment(commentId: string, text: string): Promise<void> {
   await client.post(`/${commentId}/replies`, { message: text });
 }
+
+export type MediaContainerType = "IMAGE" | "REELS" | "VIDEO";
+export type ContainerStatus = "EXPIRED" | "ERROR" | "FINISHED" | "IN_PROGRESS" | "PUBLISHED";
+
+/**
+ * Step 1 of publishing: create a media container from a publicly reachable
+ * image/video URL. Video containers process asynchronously on Meta's side —
+ * poll getContainerStatus() until it's FINISHED before publishing.
+ */
+export async function createMediaContainer(params: {
+  mediaType: MediaContainerType;
+  mediaUrl: string;
+  caption?: string;
+}): Promise<string> {
+  const { mediaType, mediaUrl, caption } = params;
+  const body: Record<string, unknown> = { caption };
+
+  if (mediaType === "IMAGE") {
+    body.image_url = mediaUrl;
+  } else {
+    body.video_url = mediaUrl;
+    body.media_type = mediaType;
+  }
+
+  const { data } = await client.post(`/${config.igBusinessAccountId}/media`, body);
+  return data.id as string;
+}
+
+/** Checks whether a media container has finished processing and is ready to publish. */
+export async function getContainerStatus(containerId: string): Promise<ContainerStatus> {
+  const { data } = await client.get(`/${containerId}`, { params: { fields: "status_code" } });
+  return data.status_code as ContainerStatus;
+}
+
+/** Step 2 of publishing: publish a FINISHED container. Returns the published media id. */
+export async function publishMediaContainer(containerId: string): Promise<string> {
+  const { data } = await client.post(`/${config.igBusinessAccountId}/media_publish`, {
+    creation_id: containerId,
+  });
+  return data.id as string;
+}

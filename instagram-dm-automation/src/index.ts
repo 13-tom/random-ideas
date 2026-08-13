@@ -5,6 +5,8 @@ import { keywordRulesRouter } from "./routes/keywordRules";
 import { commentRulesRouter } from "./routes/commentRules";
 import { welcomeMessageRouter } from "./routes/welcomeMessage";
 import { flowsRouter } from "./routes/flows";
+import { scheduledPostsRouter } from "./routes/scheduledPosts";
+import { startPostingScheduler } from "./posting/scheduler";
 
 const app = express();
 
@@ -20,7 +22,10 @@ app.use("/api/keyword-rules", keywordRulesRouter);
 app.use("/api/comment-rules", commentRulesRouter);
 app.use("/api/welcome-message", welcomeMessageRouter);
 app.use("/api/flows", flowsRouter);
+app.use("/api/scheduled-posts", scheduledPostsRouter);
 
 app.listen(config.port, () => {
   console.log(`Instagram DM automation server listening on port ${config.port}`);
 });
+
+startPostingScheduler();

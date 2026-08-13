@@ -83,3 +83,19 @@ model MessageLog {
   meta      String? // JSON blob for extra context (payload, rule id, etc.)
   createdAt DateTime @default(now())
 }
+
+// Posting automation: a post/reel to publish at (or after) scheduledFor.
+// status: PENDING -> CONTAINER_CREATED -> PUBLISHED, or FAILED at any step.
+model ScheduledPost {
+  id               String   @id @default(cuid())
+  mediaType        String // "IMAGE" | "REELS" | "VIDEO"
+  mediaUrl         String // must be a publicly reachable https URL (Meta fetches it server-side)
+  caption          String?
+  scheduledFor     DateTime
+  status           String   @default("PENDING")
+  containerId      String?
+  publishedMediaId String?
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

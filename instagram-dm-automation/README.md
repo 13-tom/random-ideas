@@ -1,11 +1,12 @@
-# Instagram DM Automation
+# Instagram DM + Posting Automation
 
-Automates Instagram DMs via Meta's official Graph API:
+Automates Instagram DMs and post publishing via Meta's official Graph API:
 
 - **Keyword auto-reply** — reply automatically when a DM contains a keyword.
 - **Comment-to-DM** — when someone comments a keyword on a post/reel, DM them privately (the classic "comment PRICE below" funnel), with an optional public reply too.
 - **Welcome message** — greet anyone who DMs the account for the first time.
 - **Simple flows** — multi-step, button-driven (quick reply) conversations triggered by a keyword.
+- **Scheduled posting** — schedule feed images, videos, or reels to publish automatically at a given time.
 
 This uses the official Instagram Graph API + webhooks (not browser automation or
 scraping), so it won't put the Instagram account at risk of a ban — but it does
@@ -21,6 +22,7 @@ require a Meta Developer App and an Instagram **Business or Creator** account.
    - `instagram_basic`
    - `instagram_manage_messages`
    - `instagram_manage_comments`
+   - `instagram_content_publish` (only needed for scheduled posting)
    - `pages_manage_metadata`
    Exchange it for a **long-lived token** (Graph API Explorer → `GET /oauth/access_token?grant_type=fb_exchange_token&...`) and put it in `PAGE_ACCESS_TOKEN`.
 6. Find the **Instagram Business Account ID** (`GET /me/accounts` then `GET /{page-id}?fields=instagram_business_account`) → `IG_BUSINESS_ACCOUNT_ID`.
@@ -52,6 +54,7 @@ There's no admin UI yet — manage rules via the REST API (e.g. with `curl`, Pos
 | Comment-to-DM | `GET/POST /api/comment-rules`, `PATCH/DELETE /api/comment-rules/:id` |
 | Welcome message | `GET/PUT /api/welcome-message` |
 | Flows | `GET/POST /api/flows`, `PATCH/DELETE /api/flows/:id` |
+| Scheduled posts | `GET/POST /api/scheduled-posts`, `GET /api/scheduled-posts/:id`, `DELETE /api/scheduled-posts/:id`, `POST /api/scheduled-posts/process-due` |
 
 Example — auto-reply to "price":
 
@@ -87,19 +90,36 @@ curl -X POST localhost:3000/api/flows \
 
 Each quick reply's `payload` is the `order` of the step it should jump to.
 
+Example — schedule a reel to publish in an hour:
+
+```bash
+curl -X POST localhost:3000/api/scheduled-posts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "mediaType": "REELS",
+    "mediaUrl": "https://example.com/my-video.mp4",
+    "caption": "New drop 🚀 #launch",
+    "scheduledFor": "2026-08-13T12:00:00Z"
+  }'
+```
+
+`mediaUrl` must be a **publicly reachable https URL** — Meta's servers fetch the file directly, so localhost/private URLs won't work (upload to S3, Cloudinary, etc. first). A background scheduler polls once a minute, creates the media container once `scheduledFor` is reached, waits for Meta to finish processing it (required for video/reels, near-instant for images), then publishes it. Check `GET /api/scheduled-posts/:id` for `status` (`PENDING` → `CONTAINER_CREATED` → `PUBLISHED`, or `FAILED` with `errorMessage` set) and `publishedMediaId` once live. Only `PENDING` posts can be cancelled via `DELETE` — once Meta has started processing the container there's no take-back.
+
+Note: Instagram enforces a rolling **~25 posts per 24 hours** limit per account via this API.
+
 ## 4. How it works
 
 - `src/webhooks/instagramWebhook.ts` — verifies the webhook handshake and each event's `X-Hub-Signature-256`, then dispatches messaging events and comment changes.
 - `src/automation/messageHandler.ts` — priority order per inbound DM: continue an in-progress flow → send welcome (first contact) → start a newly triggered flow → fall back to keyword auto-reply.
 - `src/automation/commentHandler.ts` — matches inbound comments against `CommentRule`s and sends a private-reply DM (+ optional public reply).
 - `src/automation/flowEngine.ts` — encodes/decodes quick-reply payloads as `FLOW:<flowId>:<stepOrder>` and advances a user's `Conversation.activeFlowId/activeFlowStep`.
-- All rules, flows, conversations, and message logs live in SQLite via Prisma (`prisma/schema.prisma`). Swap `DATABASE_URL` for a Postgres connection string and re-run `prisma migrate` to move to Postgres later — no code changes needed.
+- `src/posting/postingService.ts` — each scheduler tick, creates a media container for any `ScheduledPost` whose `scheduledFor` has passed, then publishes any container Meta reports as `FINISHED`. `src/posting/scheduler.ts` runs this once a minute; `POST /api/scheduled-posts/process-due` runs it on demand.
+- All rules, flows, conversations, message logs, and scheduled posts live in SQLite via Prisma (`prisma/schema.prisma`). Swap `DATABASE_URL` for a Postgres connection string and re-run `prisma migrate` to move to Postgres later — no code changes needed.
 
-## Roadmap: posting automation
+## Roadmap
 
-Not built yet, but the architecture leaves room for it: Instagram posting (feed posts, reels, stories) also goes through the Graph API, via a two-step **container → publish** flow:
+Not built yet:
 
-1. `POST /{ig-user-id}/media` with `image_url`/`video_url` + `caption` → returns a media container ID.
-2. `POST /{ig-user-id}/media_publish` with that container ID → publishes it.
-
-This would live alongside the existing `src/instagram/graphClient.ts` (e.g. a new `createMediaContainer` / `publishMedia` pair), plus a scheduling piece (a `ScheduledPost` table + a cron/worker to publish at the right time). Flagging it here rather than building it now since it's a separate feature with its own scopes (`instagram_content_publish`) and App Review requirements.
+- **Admin UI** — everything above is managed via the REST API only (curl/Postman); a simple web dashboard would make rule/flow/post management much friendlier.
+- **Stories** — the container→publish flow also supports Stories (`media_type: STORIES`); not wired up yet.
+- **Retry/backoff for failed posts** — a `FAILED` scheduled post currently stays failed; a manual re-publish endpoint or automatic retry would help with transient Graph API errors.
