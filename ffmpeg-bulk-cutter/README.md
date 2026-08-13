@@ -600,6 +600,45 @@ generated background's frame rate to the source's).
 Same `--language`/`--model`/`--hinglish-model`/`--groq`, `--caption-style`
 (+ font/color flags), and `--no-gpu` flags as the other templates.
 
+## Logo template (`template_logo.py`)
+
+A copy of `template_compose.py` with one difference: a PNG logo image
+sits left-aligned in the plain top margin above the video, instead of that
+space staying empty.
+
+```
+python template_logo.py clip.mp4 -o reel.mp4 --logo brand1
+python template_logo.py clip.mp4 -o reel.mp4 --logo /path/to/any_logo.png
+python template_logo.py clips/ -o template_output --logo brand2 --language hinglish
+python template_logo.py clip.mp4 -o reel.mp4 --logo brand1 --logo-width 300 --logo-x 80 --logo-y 40
+```
+
+**Use PNG, not JPG.** PNG supports a transparent background (an alpha
+channel) so the logo shows up as a clean cutout over the grid background -
+a JPG version would come with a solid rectangle around it, since JPG has
+no transparency. Verified this directly: overlaid a PNG with a
+transparent background onto a test video and confirmed the surrounding
+pixels show the background through, not a box.
+
+**Picking between your 5 logos:** register each one as a named preset in
+`LOGO_PRESETS` at the top of `template_logo.py` (just add a `"name":
+"/path/to/logo.png"` line), then select one per run with `--logo name`.
+`--logo` also accepts a raw file path directly, so presets are a
+convenience, not a requirement - handy if you want to switch logos
+without remembering full paths, or just pass whichever file you're using
+that day.
+
+- `--logo-width` — logo width in pixels; height is scaled automatically
+  to preserve its own aspect ratio, never stretched (default: `240`).
+- `--logo-x` — distance from the canvas's left edge (default: `60`).
+- `--logo-y` — distance from the canvas's top edge. Default: vertically
+  centered within the top margin above the video.
+
+Everything else (video box size/position, background grid, caption
+placement) is identical to `template_compose.py` - same `--language`/
+`--model`/`--hinglish-model`/`--groq`, `--caption-style` (+ font/color
+flags), `--caption-y`/`--caption-position`, `--zoom`, and `--no-gpu` flags.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, silence removal, reframing, and
