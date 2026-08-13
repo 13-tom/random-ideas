@@ -174,7 +174,7 @@ def compose_frame(tracked_path: Path, mask_path: Path, framed_path: Path, durati
 
 
 def process_video(video_path: Path, output_dir: Path, mask_path: Path, i: int, total: int, *, args,
-                   model=None, pipe=None, caption_style: CaptionStyle, use_gpu_encode: bool,
+                   model=None, pipe=None, caption_style: CaptionStyle, use_gpu_encode: bool, use_gpu_track: bool,
                    groq_api_key: str = None, groq_model: str = None):
     print(f"[{i}/{total}] Composing {video_path.name}...")
     fd, tracked_path_str = tempfile.mkstemp(suffix="_tracked.mp4", dir=str(output_dir))
@@ -182,7 +182,7 @@ def process_video(video_path: Path, output_dir: Path, mask_path: Path, i: int, t
     tracked_path = Path(tracked_path_str)
     framed_path = output_dir / f"{video_path.stem}_framed.mp4"
     try:
-        track_and_crop(video_path, tracked_path, args.video_h, use_gpu_encode, args.gpu_detect)
+        track_and_crop(video_path, tracked_path, args.video_h, use_gpu_track, args.gpu_detect)
         duration = get_media_duration(tracked_path)
         compose_frame(tracked_path, mask_path, framed_path, duration, args.video_y, use_gpu_encode)
     finally:
@@ -302,6 +302,14 @@ def main():
 
     gpu_requested = not args.no_gpu
     use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+    # The tracking step (fanpage_crop.py) pipes decoded frames straight into
+    # ffmpeg's stdin - if the GPU encoder fails to open partway through
+    # (e.g. an nvenc API version mismatch against the installed driver,
+    # confirmed via a real user report), there's no cheap way to retry with
+    # CPU mid-stream, so it needs the real functional check up front instead
+    # of just "is h264_nvenc compiled in" (has_nvenc() can be True with a
+    # driver too old/broken to actually use it).
+    use_gpu_track = gpu_requested and gpu_utils.nvenc_works()
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
 
     model = pipe = groq_api_key = None
@@ -336,7 +344,7 @@ def main():
             try:
                 process_video(
                     video_path, args.output_dir, mask_path, i, len(videos), args=args, model=model, pipe=pipe,
-                    caption_style=caption_style, use_gpu_encode=use_gpu_encode,
+                    caption_style=caption_style, use_gpu_encode=use_gpu_encode, use_gpu_track=use_gpu_track,
                     groq_api_key=groq_api_key, groq_model=groq_model,
                 )
             except Exception as e:
