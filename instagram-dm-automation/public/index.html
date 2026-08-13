@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Instagram Automation — Admin</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="brand">IG Automation</div>
+    <nav aria-label="Sections">
+      <button class="nav-item" data-tab="keyword-rules" aria-selected="true">Keyword Rules</button>
+      <button class="nav-item" data-tab="comment-rules" aria-selected="false">Comment Rules</button>
+      <button class="nav-item" data-tab="welcome" aria-selected="false">Welcome Message</button>
+      <button class="nav-item" data-tab="flows" aria-selected="false">Flows</button>
+      <button class="nav-item" data-tab="posts" aria-selected="false">Scheduled Posts</button>
+      <button class="nav-item" data-tab="logs" aria-selected="false">Message Log</button>
+    </nav>
+  </aside>
+
+  <main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <!-- Keyword rules -->
+    <section id="tab-keyword-rules" class="tab-panel">
+      <h1>Keyword auto-reply</h1>
+      <p class="hint">Replies automatically when a DM contains the keyword below.</p>
+
+      <form id="form-keyword-rule" class="card form-grid">
+        <div class="field">
+          <label for="kr-keyword">Keyword</label>
+          <input id="kr-keyword" name="keyword" type="text" required placeholder="e.g. price" />
+        </div>
+        <div class="field">
+          <label for="kr-match">Match type</label>
+          <select id="kr-match" name="matchType">
+            <option value="CONTAINS">Contains</option>
+            <option value="EXACT">Exact match</option>
+            <option value="STARTS_WITH">Starts with</option>
+          </select>
+        </div>
+        <div class="field field-wide">
+          <label for="kr-reply">Reply text</label>
+          <textarea id="kr-reply" name="replyText" required rows="2" placeholder="What to send back"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Add rule</button>
+      </form>
+
+      <div class="card">
+        <table>
+          <thead><tr><th>Keyword</th><th>Match</th><th>Reply</th><th>Status</th><th></th></tr></thead>
+          <tbody id="list-keyword-rules"></tbody>
+        </table>
+        <p class="empty" id="empty-keyword-rules" hidden>No keyword rules yet.</p>
+      </div>
+    </section>
+
+    <!-- Comment rules -->
+    <section id="tab-comment-rules" class="tab-panel">
+      <h1>Comment-to-DM</h1>
+      <p class="hint">When a comment matches the keyword, privately DM the commenter (and optionally reply publicly too).</p>
+
+      <form id="form-comment-rule" class="card form-grid">
+        <div class="field">
+          <label for="cr-keyword">Keyword</label>
+          <input id="cr-keyword" name="keyword" type="text" required placeholder="e.g. price" />
+        </div>
+        <div class="field">
+          <label for="cr-match">Match type</label>
+          <select id="cr-match" name="matchType">
+            <option value="CONTAINS">Contains</option>
+            <option value="EXACT">Exact match</option>
+            <option value="STARTS_WITH">Starts with</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="cr-media">Post/reel ID <span class="opt">(optional — blank = any post)</span></label>
+          <input id="cr-media" name="mediaId" type="text" placeholder="Media ID" />
+        </div>
+        <div class="field field-wide">
+          <label for="cr-dm">Private DM text</label>
+          <textarea id="cr-dm" name="dmText" required rows="2"></textarea>
+        </div>
+        <div class="field field-wide">
+          <label for="cr-public">Public reply <span class="opt">(optional)</span></label>
+          <textarea id="cr-public" name="publicReplyText" rows="2" placeholder="e.g. Sent you a DM! 📩"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Add rule</button>
+      </form>
+
+      <div class="card">
+        <table>
+          <thead><tr><th>Keyword</th><th>Post</th><th>DM text</th><th>Status</th><th></th></tr></thead>
+          <tbody id="list-comment-rules"></tbody>
+        </table>
+        <p class="empty" id="empty-comment-rules" hidden>No comment rules yet.</p>
+      </div>
+    </section>
+
+    <!-- Welcome message -->
+    <section id="tab-welcome" class="tab-panel">
+      <h1>Welcome message</h1>
+      <p class="hint">Sent once to anyone who DMs the account for the first time.</p>
+
+      <form id="form-welcome" class="card form-grid">
+        <div class="field field-wide">
+          <label for="wm-text">Message</label>
+          <textarea id="wm-text" name="text" rows="3" required></textarea>
+        </div>
+        <label class="checkbox-field">
+          <input type="checkbox" id="wm-active" name="isActive" checked />
+          Active
+        </label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </form>
+    </section>
+
+    <!-- Flows -->
+    <section id="tab-flows" class="tab-panel">
+      <h1>Flows</h1>
+      <p class="hint">A multi-step conversation with buttons, started by a trigger keyword. Each button jumps to the step number in its "Next step" field.</p>
+
+      <form id="form-flow" class="card">
+        <div class="form-grid">
+          <div class="field">
+            <label for="fl-name">Flow name</label>
+            <input id="fl-name" name="name" type="text" required placeholder="e.g. Onboarding" />
+          </div>
+          <div class="field">
+            <label for="fl-trigger">Trigger keyword</label>
+            <input id="fl-trigger" name="triggerKeyword" type="text" required placeholder="e.g. start" />
+          </div>
+          <div class="field">
+            <label for="fl-match">Match type</label>
+            <select id="fl-match" name="triggerMatch">
+              <option value="CONTAINS">Contains</option>
+              <option value="EXACT">Exact match</option>
+              <option value="STARTS_WITH">Starts with</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="flow-steps"></div>
+        <button type="button" class="btn btn-ghost" id="add-step">+ Add step</button>
+        <button type="submit" class="btn btn-primary">Create flow</button>
+      </form>
+
+      <div id="list-flows" class="flow-list"></div>
+      <p class="empty" id="empty-flows" hidden>No flows yet.</p>
+    </section>
+
+    <!-- Scheduled posts -->
+    <section id="tab-posts" class="tab-panel">
+      <h1>Scheduled posts</h1>
+      <p class="hint">Media must be a publicly reachable https URL — Instagram fetches it directly.</p>
+
+      <form id="form-post" class="card form-grid">
+        <div class="field">
+          <label for="sp-type">Media type</label>
+          <select id="sp-type" name="mediaType">
+            <option value="IMAGE">Image</option>
+            <option value="REELS">Reel</option>
+            <option value="VIDEO">Video</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="sp-when">Publish at</label>
+          <input id="sp-when" name="scheduledFor" type="datetime-local" required />
+        </div>
+        <div class="field field-wide">
+          <label for="sp-url">Media URL</label>
+          <input id="sp-url" name="mediaUrl" type="url" required placeholder="https://…" />
+        </div>
+        <div class="field field-wide">
+          <label for="sp-caption">Caption <span class="opt">(optional)</span></label>
+          <textarea id="sp-caption" name="caption" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Schedule post</button>
+      </form>
+
+      <div class="card">
+        <table>
+          <thead><tr><th>Type</th><th>Media</th><th>Publish at</th><th>Status</th><th></th></tr></thead>
+          <tbody id="list-posts"></tbody>
+        </table>
+        <p class="empty" id="empty-posts" hidden>No scheduled posts yet.</p>
+      </div>
+    </section>
+
+    <!-- Message log -->
+    <section id="tab-logs" class="tab-panel">
+      <h1>Message log</h1>
+      <div class="card toolbar">
+        <div class="field">
+          <label for="log-filter">Filter by Instagram user ID</label>
+          <input id="log-filter" type="text" placeholder="IGSID" />
+        </div>
+        <button type="button" class="btn btn-ghost" id="refresh-logs">Refresh</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Time</th><th>Direction</th><th>User</th><th>Text</th></tr></thead>
+          <tbody id="list-logs"></tbody>
+        </table>
+        <p class="empty" id="empty-logs" hidden>No messages logged yet.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
