@@ -32,15 +32,23 @@ from template_compose import _run_with_gpu_fallback
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 LOGO_EXTENSIONS = {".png"}
 
+# Logo assets live alongside this script (in logos/), not at some
+# machine-specific path - resolved via __file__ so it works regardless of
+# where the repo is cloned/run from.
+LOGOS_DIR = Path(__file__).resolve().parent / "logos"
+
 # ============================================================================
-# LOGO PRESETS - register your 5 logos here (name -> file path), then pick
+# LOGO PRESETS - register your logos here (name -> file path), then pick
 # one per run with --logo <name>. Add/remove/rename entries freely - this
 # is just a lookup table, nothing else in the file needs to change.
 # ============================================================================
 
 LOGO_PRESETS = {
-    # "brand1": "/path/to/logo1.png",
-    # "brand2": "/path/to/logo2.png",
+    "aieverymorning": str(LOGOS_DIR / "aieverymorning.png"),
+    "itfeelsai": str(LOGOS_DIR / "itfeelsai.png"),
+    # short aliases for the same two logos
+    "brand1": str(LOGOS_DIR / "aieverymorning.png"),
+    "brand2": str(LOGOS_DIR / "itfeelsai.png"),
     # "brand3": "/path/to/logo3.png",
     # "brand4": "/path/to/logo4.png",
     # "brand5": "/path/to/logo5.png",

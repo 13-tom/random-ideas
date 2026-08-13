@@ -623,11 +623,25 @@ come with a solid rectangle around it, since JPG has no transparency.
 Verified this directly: overlaid a transparent PNG onto a test video and
 confirmed the surrounding pixels show the video through, not a box.
 
-**Picking between your 5 logos:** register each one as a named preset in
+**Picking between your logos:** register each one as a named preset in
 `LOGO_PRESETS` at the top of `add_logo.py` (just add a `"name":
 "/path/to/logo.png"` line), then select one per run with `--logo name`.
 `--logo` also accepts a raw file path directly, so presets are a
-convenience, not a requirement.
+convenience, not a requirement. Two are already registered, with their
+assets checked into `logos/`:
+- `aieverymorning` (alias: `brand1`) — `logos/aieverymorning.png`
+- `itfeelsai` (alias: `brand2`) — `logos/itfeelsai.png`
+
+Both started as a white-background screenshot (icon + wordmark + verified
+badge) and were processed before registering: the white background was
+removed via a color-to-alpha un-matte (which also cleans up anti-aliased
+edges properly, not just a hard cutout), and - since the wordmark text
+was black and would've been unreadable against these templates' dark
+backgrounds - just the text was recolored white, leaving the icon/avatar
+and badge at their original colors untouched (done by isolating the
+wordmark's own horizontal pixel range first, not a blanket recolor -
+an earlier blanket attempt also washed out the icon and photo, which is
+why the isolation step matters).
 
 - `--logo-width` — logo width in pixels; height is scaled automatically
   to preserve its own aspect ratio, never stretched (default: `240`).
