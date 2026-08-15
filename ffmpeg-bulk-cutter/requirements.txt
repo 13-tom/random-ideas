@@ -1,0 +1,26 @@
+faster-whisper
+
+# torch + transformers are only needed for --language hinglish
+# (Oriserve/Whisper-Hindi2Hinglish-Swift). Skip these two if you only ever
+# use en/hi/auto - faster-whisper alone already supports GPU (CUDA) or CPU
+# on its own, no torch required.
+#
+# The default line below pulls the standard torch build, which supports
+# both CPU and NVIDIA GPU automatically - use this if you have an NVIDIA
+# GPU (e.g. GTX 1650) so hinglish mode can actually use it.
+torch
+transformers
+
+# If you do NOT have an NVIDIA GPU and want a smaller download instead,
+# comment out "torch" above and uncomment this CPU-only build:
+# torch --index-url https://download.pytorch.org/whl/cpu
+
+# Only needed for reframe.py --track-faces (smart subject-tracking crop).
+# CPU-only, no torch needed - detection runs fine without a GPU.
+opencv-python-headless
+mediapipe
+
+# Only needed for --language hinglish --groq (paid Groq API instead of the
+# free local model) - lets you skip torch/transformers entirely if you only
+# ever use --groq for Hinglish.
+requests
