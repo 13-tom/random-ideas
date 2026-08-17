@@ -600,6 +600,62 @@ generated background's frame rate to the source's).
 Same `--language`/`--model`/`--hinglish-model`/`--groq`, `--caption-style`
 (+ font/color flags), and `--no-gpu` flags as the other templates.
 
+## Dreamina template (`template_dreamina.py`)
+
+A bulk batch tool for a whole folder of numbered clips (built for a
+100-video batch): burns a fixed title - not a spoken-word transcription,
+one string per video read from a text file - and a logo, automatically
+choosing the layout based on each clip's own orientation.
+
+```
+python template_dreamina.py clips/ titles.txt -o output
+```
+
+- **Horizontal clips** (width > height) get composed onto a white
+  1080x1920 canvas matching the reference screenshot: bold black title at
+  the top, the video cropped to fill its box edge-to-edge below that, and
+  the logo centered beneath the video.
+- **Vertical clips** (height ≥ width) are **not** recomposed - the title
+  (in a solid highlighted box, like a caption chip) and the logo are
+  burned straight onto the original video, at its own resolution, at
+  comparable relative positions.
+
+**Matching videos to titles:** every video filename and every line of
+`titles.txt` must start with the same clip number - e.g. `clip_007.mp4`
+matches a titles.txt line starting with `7`. A video with no number in
+its filename, or no matching title line, is skipped with a clear reason
+printed to the console rather than guessed at.
+
+**titles.txt format** - one line per clip, `NUMBER<sep>title text`:
+```
+7: My brother thought this was a movie clip until I told him it's AI
+12 - There is no way AI made this entire video in 30 seconds
+```
+`<sep>` can be `:`, `.`, `)`, `-`, or `|`. Blank lines are ignored.
+
+**Two logos alternate automatically** by the clip's own number - odd
+numbers get one, even numbers get the other - so a big batch doesn't look
+identical clip to clip. Two are already registered and checked into
+`logos/` (`dreamina_lowest_price.png` / `dreamina_free_generation.png`) -
+override with `--logo-odd`/`--logo-even` to use different files.
+
+Other flags: `--font`/`--title-font-size` (horizontal title),
+`--vertical-title-y`/`--vertical-title-font-size`/`--title-box-color`
+(vertical title), `--logo-width`/`--vertical-logo-width`/
+`--vertical-logo-margin-bottom` (logo sizing/position), `--no-gpu`.
+Layout constants for the horizontal canvas (`TITLE_Y`, `VIDEO_BOX_H`,
+`LOGO_Y`, etc.) are at the top of the file for anything not exposed as a
+flag - same edit-directly-or-pass-a-flag pattern as the other templates.
+
+Verified end-to-end with one synthetic horizontal clip and one synthetic
+vertical clip against a matching titles.txt: correct orientation
+detection, correct title/logo matching by number, correct logo
+alternation (odd->lowest_price, even->free_generation), horizontal output
+resized to the 1080x1920 canvas while vertical output kept its own
+source resolution untouched - plus a skip-behavior check (unmatched
+video, unmatched title number) confirming neither crashes nor silently
+guesses.
+
 ## Adding a logo/watermark (`add_logo.py`)
 
 A plain watermark/branding pass, nothing else: stamps a PNG logo onto a
