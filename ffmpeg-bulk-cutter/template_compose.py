@@ -175,7 +175,17 @@ def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu:
 
 
 def _escape_subtitles_path(path: Path) -> str:
-    return str(path).replace("\\", "/").replace(":", "\\:")
+    # Escaping the drive-letter colon alone isn't enough - confirmed via a
+    # real user report (Windows, ffmpeg 9.0) and reproduced directly: the
+    # subtitles filter's own option parser still splits on the escaped
+    # colon and misreads everything after it as the filter's SECOND
+    # positional option (original_size), throwing "Unable to parse
+    # ... as image size". Wrapping the whole escaped path in single quotes
+    # makes the filtergraph parser treat it as one literal token - the
+    # standard fix for this exact failure mode - verified fixed with the
+    # same reproduction.
+    escaped = str(path).replace("\\", "/").replace(":", "\\:")
+    return f"'{escaped}'"
 
 
 def burn_ass(video_path: Path, ass_path: Path, output_path: Path, use_gpu: bool):

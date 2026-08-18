@@ -389,8 +389,19 @@ def _escape_subtitles_path(srt_path: Path) -> str:
     # Windows paths like output\captioned\clip.srt). Using forward slashes
     # sidesteps backslash escaping entirely; only a drive-letter colon
     # (e.g. "F:") still needs escaping.
+    #
+    # Escaping that colon alone isn't enough, though - confirmed via a real
+    # user report (Windows, ffmpeg 9.0) and reproduced directly: the
+    # subtitles filter's own option parser still splits on the escaped
+    # colon and misreads everything after it as the filter's SECOND
+    # positional option (original_size), throwing "Unable to parse
+    # ... as image size". Wrapping the whole escaped path in single quotes
+    # makes the filtergraph parser treat it as one literal token - the
+    # standard fix for this exact failure mode - verified fixed with the
+    # same reproduction.
     path_str = str(srt_path).replace("\\", "/")
-    return path_str.replace(":", "\\:")
+    escaped = path_str.replace(":", "\\:")
+    return f"'{escaped}'"
 
 
 def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu: bool = False):
