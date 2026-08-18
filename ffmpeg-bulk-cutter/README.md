@@ -611,10 +611,15 @@ choosing the layout based on each clip's own orientation.
 python template_dreamina.py clips/ titles.txt -o output
 ```
 
-- **Horizontal clips** (width > height) get composed onto a white
-  1080x1920 canvas matching the reference screenshot: bold black title at
-  the top, the video cropped to fill its box edge-to-edge below that, and
-  the logo centered beneath the video.
+- **Horizontal clips** (width > height) get composed onto a white (or
+  black, with `--bg-color black`) 1080x1920 canvas matching the reference
+  screenshot: bold title at the top, the video cropped to fill its box
+  edge-to-edge below that, and the logo centered beneath the video.
+  `--bg-color {white,black}` (default `white`) - the title text
+  auto-switches to black-on-white or white-on-black so it stays readable
+  either way. Only affects horizontal-template clips; vertical clips
+  aren't recomposed onto a canvas at all, so there's no background to
+  change there.
 - **Vertical clips** (height ≥ width) are **not** recomposed - the title
   (in a solid highlighted box, like a caption chip) and the logo are
   burned straight onto the original video, at its own resolution, at
