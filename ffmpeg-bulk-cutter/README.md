@@ -639,13 +639,38 @@ identical clip to clip. Two are already registered and checked into
 `logos/` (`dreamina_lowest_price.png` / `dreamina_free_generation.png`) -
 override with `--logo-odd`/`--logo-even` to use different files.
 
+**Adjusting the title's line width** (wider lines = fewer lines): raise
+`--title-max-chars-per-line` (horizontal) or
+`--vertical-title-max-chars-per-line` (vertical) - each controls how many
+characters fit on one line before it wraps to the next.
+
+**Shrinking the logo:** `--logo-width` (horizontal) /
+`--vertical-logo-width` (vertical) - height scales automatically to match,
+so it never distorts. If you're matching an Instagram grid-line size, note
+`add_logo.py`'s watermark placement uses the same `--logo-width` idea, so
+the two tools size logos consistently.
+
+**Keeping the logo off Instagram's own UI (vertical clips only):**
+Instagram's Reels player overlays its own UI on top of your video - a
+username/caption/audio-credit stack in the bottom-left (can run 2-3 lines
+for a long caption) and a like/comment/share/save icon column on the
+right (roughly the rightmost ~150px of a 1080px-wide frame).
+`--vertical-logo-margin-bottom` (default `420`) is the distance from the
+video's own bottom edge to the **logo's own bottom edge** - raise it to
+push the logo further up and clear more space underneath for that UI.
+(An earlier version measured this from the logo's *top* edge instead,
+which silently let the logo sit right in that zone - fixed to measure
+from the true bottom via ffmpeg's own runtime `h` overlay variable, so
+it's correct regardless of the logo's aspect ratio.) The logo is already
+horizontally centered well clear of the right icon column as long as
+the width stays well under the frame width.
+
 Other flags: `--font`/`--title-font-size` (horizontal title),
 `--vertical-title-y`/`--vertical-title-font-size`/`--title-box-color`
-(vertical title), `--logo-width`/`--vertical-logo-width`/
-`--vertical-logo-margin-bottom` (logo sizing/position), `--no-gpu`.
-Layout constants for the horizontal canvas (`TITLE_Y`, `VIDEO_BOX_H`,
-`LOGO_Y`, etc.) are at the top of the file for anything not exposed as a
-flag - same edit-directly-or-pass-a-flag pattern as the other templates.
+(vertical title), `--no-gpu`. Layout constants for the horizontal canvas
+(`TITLE_Y`, `VIDEO_BOX_H`, `LOGO_Y`, etc.) are at the top of the file for
+anything not exposed as a flag - same edit-directly-or-pass-a-flag pattern
+as the other templates.
 
 Verified end-to-end with one synthetic horizontal clip and one synthetic
 vertical clip against a matching titles.txt: correct orientation

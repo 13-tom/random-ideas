@@ -83,7 +83,16 @@ VERTICAL_TITLE_Y = 150
 VERTICAL_TITLE_MAX_CHARS_PER_LINE = 20
 VERTICAL_TITLE_FONT_SIZE = 56
 VERTICAL_LOGO_WIDTH = 380
-VERTICAL_LOGO_MARGIN_BOTTOM = 300  # distance from the video's own bottom edge
+# Distance from the video's own bottom edge to the LOGO'S OWN BOTTOM EDGE
+# (not its top - see the comment in compose_vertical). Instagram's Reels
+# player overlays its own UI on top of your video: username + caption +
+# audio credit stacked in the bottom-left, and a like/comment/share/save
+# icon column on the right (roughly the rightmost ~150px of a 1080px-wide
+# frame). 420px keeps the logo clear of that bottom-left text stack, which
+# can run 2-3 lines deep for a long caption; the logo itself is already
+# horizontally centered well clear of the right icon column as long as
+# VERTICAL_LOGO_WIDTH stays well under the frame width.
+VERTICAL_LOGO_MARGIN_BOTTOM = 420
 
 # ============================================================================
 
@@ -166,12 +175,18 @@ def compose_vertical(input_path: Path, ass_path: Path, logo_path: Path, output_p
     """No recomposition - burn the title (highlighted box) and logo
     straight onto the original vertical video, at its own resolution."""
     src_w, src_h = get_video_resolution(input_path)
-    logo_y = max(0, src_h - logo_margin_bottom)
     escaped_ass = _escape_subtitles_path(ass_path)
+    # y=H-{margin}-h (h = the logo's own scaled height, resolved by ffmpeg
+    # at filter-graph runtime) measures logo_margin_bottom from the LOGO'S
+    # OWN BOTTOM EDGE to the frame's bottom edge. An earlier version used
+    # H-{margin} directly as the logo's TOP y-coordinate instead, which
+    # silently let the logo's bottom edge sit margin-minus-height (not
+    # margin) pixels from the true bottom - for this logo's height that
+    # put it right in Instagram's own username/caption overlay zone.
     filter_complex = (
         f"[0:v]subtitles={escaped_ass}[titled];"
         f"[1:v]scale={logo_width}:-1[logo];"
-        f"[titled][logo]overlay=x=({src_w}-w)/2:y={logo_y}[outv]"
+        f"[titled][logo]overlay=x=({src_w}-w)/2:y=H-{logo_margin_bottom}-h[outv]"
     )
     base_cmd = [
         "ffmpeg", "-y", "-nostdin",
@@ -203,7 +218,7 @@ def process_video(video_path: Path, title: str, logo_path: Path, output_dir: Pat
                 font=args.font, font_size=args.title_font_size, text_rgb=(0, 0, 0),
                 bold=True, outline_width=0, position="top", margin_v=TITLE_Y,
             )
-            write_title_ass(title, ass_path, (CANVAS_W, CANVAS_H), style, duration, TITLE_MAX_CHARS_PER_LINE)
+            write_title_ass(title, ass_path, (CANVAS_W, CANVAS_H), style, duration, args.title_max_chars_per_line)
             compose_horizontal(video_path, ass_path, logo_path, output_path, duration, use_gpu, args.logo_width)
         else:
             style = CaptionStyle(
@@ -211,7 +226,7 @@ def process_video(video_path: Path, title: str, logo_path: Path, output_dir: Pat
                 highlight_rgb=parse_color(args.title_box_color), bold=True,
                 box=True, position="top", margin_v=args.vertical_title_y,
             )
-            write_title_ass(title, ass_path, (src_w, src_h), style, duration, VERTICAL_TITLE_MAX_CHARS_PER_LINE)
+            write_title_ass(title, ass_path, (src_w, src_h), style, duration, args.vertical_title_max_chars_per_line)
             compose_vertical(video_path, ass_path, logo_path, output_path, duration, use_gpu,
                               args.vertical_logo_width, args.vertical_logo_margin_bottom)
     finally:
@@ -227,12 +242,14 @@ def main():
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("dreamina_output"), help="Where to write processed videos (default: ./dreamina_output)")
     parser.add_argument("--font", default="Arial", help="Title font family (default: Arial)")
     parser.add_argument("--title-font-size", type=int, default=TITLE_FONT_SIZE, help=f"Title font size for horizontal-template clips (default: {TITLE_FONT_SIZE})")
+    parser.add_argument("--title-max-chars-per-line", type=int, default=TITLE_MAX_CHARS_PER_LINE, help=f"How many characters wide a title line can be, for horizontal-template clips, before wrapping to a new line - raise this to widen lines and use fewer of them (default: {TITLE_MAX_CHARS_PER_LINE})")
     parser.add_argument("--logo-width", type=int, default=LOGO_WIDTH, help=f"Logo width in pixels for horizontal-template clips (default: {LOGO_WIDTH})")
     parser.add_argument("--vertical-title-y", type=int, default=VERTICAL_TITLE_Y, help=f"Title's distance from the top edge for vertical clips (default: {VERTICAL_TITLE_Y})")
     parser.add_argument("--vertical-title-font-size", type=int, default=VERTICAL_TITLE_FONT_SIZE, help=f"Title font size for vertical clips (default: {VERTICAL_TITLE_FONT_SIZE})")
+    parser.add_argument("--vertical-title-max-chars-per-line", type=int, default=VERTICAL_TITLE_MAX_CHARS_PER_LINE, help=f"How many characters wide a title line can be, for vertical clips, before wrapping to a new line (default: {VERTICAL_TITLE_MAX_CHARS_PER_LINE})")
     parser.add_argument("--title-box-color", default="black", help="Highlighted box color behind the title on vertical clips (default: black)")
     parser.add_argument("--vertical-logo-width", type=int, default=VERTICAL_LOGO_WIDTH, help=f"Logo width in pixels for vertical clips (default: {VERTICAL_LOGO_WIDTH})")
-    parser.add_argument("--vertical-logo-margin-bottom", type=int, default=VERTICAL_LOGO_MARGIN_BOTTOM, help=f"Logo's distance from the video's own bottom edge, for vertical clips (default: {VERTICAL_LOGO_MARGIN_BOTTOM})")
+    parser.add_argument("--vertical-logo-margin-bottom", type=int, default=VERTICAL_LOGO_MARGIN_BOTTOM, help=f"Distance from the video's own bottom edge to the LOGO'S OWN BOTTOM EDGE, for vertical clips - raise this to clear more space for Instagram's own username/caption overlay (default: {VERTICAL_LOGO_MARGIN_BOTTOM})")
     parser.add_argument("--logo-odd", default=DEFAULT_LOGO_ODD, help="Logo PNG used for odd-numbered clips")
     parser.add_argument("--logo-even", default=DEFAULT_LOGO_EVEN, help="Logo PNG used for even-numbered clips")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
