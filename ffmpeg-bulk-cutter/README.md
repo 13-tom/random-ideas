@@ -647,7 +647,13 @@ override with `--logo-odd`/`--logo-even` to use different files.
 **Adjusting the title's line width** (wider lines = fewer lines): raise
 `--title-max-chars-per-line` (horizontal) or
 `--vertical-title-max-chars-per-line` (vertical) - each controls how many
-characters fit on one line before it wraps to the next.
+characters fit on one line before it wraps to the next. `--title-margin`
+(default `10`px, both branches) controls how close the wrapped lines get
+to the left/right edges - lines stretch out almost edge-to-edge at the
+default instead of leaving a wide gutter, which along with the defaults
+above cuts the line count noticeably for the same title text (verified:
+a 4-line title dropped to 3 lines horizontal / 3 to 2 vertical on the
+same test title, rendered and visually confirmed).
 
 **Shrinking the logo:** `--logo-width` (horizontal) /
 `--vertical-logo-width` (vertical) - height scales automatically to match,

@@ -47,6 +47,7 @@ class CaptionStyle:
     box: bool = False
     position: str = "bottom"
     margin_v: int = 80
+    margin_lr: int = 40
 
 
 def parse_color(value: str) -> tuple:
@@ -116,7 +117,7 @@ def _style_line(name: str, style: CaptionStyle, primary_rgb: tuple, outline_rgb:
     return (
         f"Style: {name},{style.font},{style.font_size},{primary},{primary},{outline},{back},"
         f"{-1 if style.bold else 0},{-1 if style.italic else 0},0,0,100,100,0,0,"
-        f"{border_style},{style.outline_width},1,{alignment},40,40,{style.margin_v},1\n"
+        f"{border_style},{style.outline_width},1,{alignment},{style.margin_lr},{style.margin_lr},{style.margin_v},1\n"
     )
 
 

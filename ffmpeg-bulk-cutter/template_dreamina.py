@@ -67,7 +67,7 @@ DEFAULT_BG_COLOR = "white"  # or "black" - override per-run with --bg-color
 # --- Horizontal-clip template (composed canvas) ---
 TITLE_Y = 220                  # y of the title text block's top edge
 TITLE_ZONE_H = 380             # reserved height for the title (fits ~3 wrapped lines at TITLE_FONT_SIZE)
-TITLE_MAX_CHARS_PER_LINE = 22  # rough text-wrap width - tune alongside TITLE_FONT_SIZE
+TITLE_MAX_CHARS_PER_LINE = 30  # rough text-wrap width - tune alongside TITLE_FONT_SIZE/TITLE_MARGIN
 TITLE_FONT_SIZE = 64
 
 VIDEO_Y = TITLE_Y + TITLE_ZONE_H   # video box starts right after the title zone
@@ -80,9 +80,15 @@ LOGO_WIDTH = 420
 
 # --- Vertical-clip direct overlay (no recomposition) ---
 VERTICAL_TITLE_Y = 150
-VERTICAL_TITLE_MAX_CHARS_PER_LINE = 20
+VERTICAL_TITLE_MAX_CHARS_PER_LINE = 28
 VERTICAL_TITLE_FONT_SIZE = 56
 VERTICAL_LOGO_WIDTH = 380
+
+# Side margin for the title text, both branches - how close the wrapped
+# lines get to the frame's left/right edges. Small (2-10px) stretches
+# lines out almost edge-to-edge, which also means more characters fit per
+# line before wrapping, so fewer lines overall for the same title text.
+DEFAULT_TITLE_MARGIN = 10
 # Distance from the video's own bottom edge to the LOGO'S OWN BOTTOM EDGE
 # (not its top - see the comment in compose_vertical). Instagram's Reels
 # player overlays its own UI on top of your video: username + caption +
@@ -221,6 +227,7 @@ def process_video(video_path: Path, title: str, logo_path: Path, output_dir: Pat
             style = CaptionStyle(
                 font=args.font, font_size=args.title_font_size, text_rgb=title_rgb,
                 bold=True, outline_width=0, position="top", margin_v=TITLE_Y,
+                margin_lr=args.title_margin,
             )
             write_title_ass(title, ass_path, (CANVAS_W, CANVAS_H), style, duration, args.title_max_chars_per_line)
             compose_horizontal(video_path, ass_path, logo_path, output_path, duration, use_gpu,
@@ -230,6 +237,7 @@ def process_video(video_path: Path, title: str, logo_path: Path, output_dir: Pat
                 font=args.font, font_size=args.vertical_title_font_size,
                 highlight_rgb=parse_color(args.title_box_color), bold=True,
                 box=True, position="top", margin_v=args.vertical_title_y,
+                margin_lr=args.title_margin,
             )
             write_title_ass(title, ass_path, (src_w, src_h), style, duration, args.vertical_title_max_chars_per_line)
             compose_vertical(video_path, ass_path, logo_path, output_path, duration, use_gpu,
@@ -248,6 +256,7 @@ def main():
     parser.add_argument("--font", default="Arial", help="Title font family (default: Arial)")
     parser.add_argument("--title-font-size", type=int, default=TITLE_FONT_SIZE, help=f"Title font size for horizontal-template clips (default: {TITLE_FONT_SIZE})")
     parser.add_argument("--title-max-chars-per-line", type=int, default=TITLE_MAX_CHARS_PER_LINE, help=f"How many characters wide a title line can be, for horizontal-template clips, before wrapping to a new line - raise this to widen lines and use fewer of them (default: {TITLE_MAX_CHARS_PER_LINE})")
+    parser.add_argument("--title-margin", type=int, default=DEFAULT_TITLE_MARGIN, help=f"Side margin (pixels) for title text, both horizontal and vertical clips - how close the wrapped lines get to the left/right edges (default: {DEFAULT_TITLE_MARGIN})")
     parser.add_argument("--bg-color", choices=["white", "black"], default=DEFAULT_BG_COLOR, help=f"Canvas background color for horizontal-template clips - the title text auto-switches to black-on-white or white-on-black to stay readable either way (default: {DEFAULT_BG_COLOR})")
     parser.add_argument("--logo-width", type=int, default=LOGO_WIDTH, help=f"Logo width in pixels for horizontal-template clips (default: {LOGO_WIDTH})")
     parser.add_argument("--vertical-title-y", type=int, default=VERTICAL_TITLE_Y, help=f"Title's distance from the top edge for vertical clips (default: {VERTICAL_TITLE_Y})")
