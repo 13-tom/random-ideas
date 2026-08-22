@@ -94,7 +94,7 @@ CTA_DIM_OPACITY = 0.85                 # cta slide: black overlay opacity over t
 CTA_LINE1_TOP_PCT = 0.448              # cta slide: "COMMENT FOR" text top edge, as % of canvas height
 CTA_LINE1_WIDTH_PCT = 0.216            # cta slide: "COMMENT FOR" fit-to-width, as % of canvas width
 CTA_UNDERLINE_GAP_PCT = 0.0073         # cta slide: gap between "COMMENT FOR" bottom and its underline
-CTA_LINE2_GAP_PCT = 0.0198             # cta slide: gap between the underline and "PROMPT"
+CTA_LINE2_GAP_PCT = 0.0112             # cta slide: gap between the underline and "PROMPT"
 CTA_LINE2_WIDTH_PCT = 0.4055           # cta slide: "PROMPT" fit-to-width, as % of canvas width
 CTA_LOGO_WIDTH_PCT = 0.30              # cta slide: logo width, as % of canvas width
 CTA_LOGO_BOTTOM_MARGIN_PCT = 0.06      # cta slide: logo distance from bottom edge
@@ -350,20 +350,27 @@ def build_cta_slide(base_img: Image.Image, font_path: str, line1: str, line2: st
     line1_font = fit_font(line1, font_path, round(w * CTA_LINE1_WIDTH_PCT), start_size=round(h * 0.03))
     line2_font = fit_font(line2, font_path, round(w * CTA_LINE2_WIDTH_PCT), start_size=round(h * 0.075))
 
+    # draw_text_centered_x's y is an internal font anchor, not the visual
+    # ink top - different fonts/sizes carry different padding above the
+    # ink (bbox[1]), so naively chaining line1_top + line1_h + gap drifted
+    # from the measured reference gap once that padding wasn't the same
+    # for both lines. Subtracting each font's own bbox[1] here makes
+    # "top"/"bottom" below mean the actual visible ink edges.
     line1_bbox = line1_font.getbbox(line1)
-    line1_h = line1_bbox[3] - line1_bbox[1]
-    line1_top = round(h * CTA_LINE1_TOP_PCT)
-    draw_text_centered_x(draw, line1, line1_font, w, line1_top, fill=(255, 255, 255))
+    line1_ink_h = line1_bbox[3] - line1_bbox[1]
+    line1_ink_top = round(h * CTA_LINE1_TOP_PCT)
+    draw_text_centered_x(draw, line1, line1_font, w, line1_ink_top - line1_bbox[1], fill=(255, 255, 255))
 
     line1_w = line1_bbox[2] - line1_bbox[0]
-    underline_y = line1_top + line1_h + round(h * CTA_UNDERLINE_GAP_PCT)
+    underline_y = line1_ink_top + line1_ink_h + round(h * CTA_UNDERLINE_GAP_PCT)
     draw.line(
         ((w - line1_w) // 2, underline_y, (w + line1_w) // 2, underline_y),
         fill=(255, 255, 255), width=max(1, round(h * 0.002)),
     )
 
-    line2_top = underline_y + round(h * CTA_LINE2_GAP_PCT)
-    line2_h = draw_text_centered_x(draw, line2, line2_font, w, line2_top, fill=(255, 255, 255))
+    line2_bbox = line2_font.getbbox(line2)
+    line2_ink_top = underline_y + round(h * CTA_LINE2_GAP_PCT)
+    draw_text_centered_x(draw, line2, line2_font, w, line2_ink_top - line2_bbox[1], fill=(255, 255, 255))
 
     if logo_path:
         logo = Image.open(logo_path).convert("RGBA")
