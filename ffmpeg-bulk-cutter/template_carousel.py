@@ -86,9 +86,16 @@ INSET_CORNER_RADIUS_PCT = 0.03         # reveal slide: inset rounded-corner radi
 PAGE_BADGE_MARGIN_PCT = 0.04           # reveal slide: page-number badge distance from top/right edges
 PAGE_BADGE_FONT_PCT = 0.032            # reveal slide: page-number badge font size, as % of canvas height
 
-CTA_DIM_OPACITY = 0.62                 # cta slide: black overlay opacity over the base photo (0=none, 1=fully black)
-CTA_LINE1_Y_PCT = 0.50                 # cta slide: "COMMENT FOR" vertical center, as % of canvas height
-CTA_LINE2_GAP_PCT = 0.018              # cta slide: gap between "COMMENT FOR" and "PROMPT"
+# CTA constants below were measured the same way as the cover slide's -
+# pixel bounding-box scan of two independent reference cover+CTA pairs
+# (same base photo, so a clean text-free region gives the true dim
+# opacity; both pairs agreed closely on every value here).
+CTA_DIM_OPACITY = 0.85                 # cta slide: black overlay opacity over the base photo (0=none, 1=fully black)
+CTA_LINE1_TOP_PCT = 0.448              # cta slide: "COMMENT FOR" text top edge, as % of canvas height
+CTA_LINE1_WIDTH_PCT = 0.216            # cta slide: "COMMENT FOR" fit-to-width, as % of canvas width
+CTA_UNDERLINE_GAP_PCT = 0.0073         # cta slide: gap between "COMMENT FOR" bottom and its underline
+CTA_LINE2_GAP_PCT = 0.0198             # cta slide: gap between the underline and "PROMPT"
+CTA_LINE2_WIDTH_PCT = 0.4055           # cta slide: "PROMPT" fit-to-width, as % of canvas width
 CTA_LOGO_WIDTH_PCT = 0.30              # cta slide: logo width, as % of canvas width
 CTA_LOGO_BOTTOM_MARGIN_PCT = 0.06      # cta slide: logo distance from bottom edge
 
@@ -340,16 +347,16 @@ def build_cta_slide(base_img: Image.Image, font_path: str, line1: str, line2: st
     canvas = Image.blend(canvas, overlay, CTA_DIM_OPACITY)
     draw = ImageDraw.Draw(canvas)
 
-    line1_font = ImageFont.truetype(font_path, round(h * 0.03))
-    line2_font = fit_font(line2, font_path, round(w * 0.6), start_size=round(h * 0.075))
+    line1_font = fit_font(line1, font_path, round(w * CTA_LINE1_WIDTH_PCT), start_size=round(h * 0.03))
+    line2_font = fit_font(line2, font_path, round(w * CTA_LINE2_WIDTH_PCT), start_size=round(h * 0.075))
 
     line1_bbox = line1_font.getbbox(line1)
     line1_h = line1_bbox[3] - line1_bbox[1]
-    line1_top = round(h * CTA_LINE1_Y_PCT) - line1_h
+    line1_top = round(h * CTA_LINE1_TOP_PCT)
     draw_text_centered_x(draw, line1, line1_font, w, line1_top, fill=(255, 255, 255))
 
     line1_w = line1_bbox[2] - line1_bbox[0]
-    underline_y = line1_top + line1_h + round(h * 0.008)
+    underline_y = line1_top + line1_h + round(h * CTA_UNDERLINE_GAP_PCT)
     draw.line(
         ((w - line1_w) // 2, underline_y, (w + line1_w) // 2, underline_y),
         fill=(255, 255, 255), width=max(1, round(h * 0.002)),
