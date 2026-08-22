@@ -755,6 +755,66 @@ clip instead of finishing instantly. Fixed by passing `-t` explicitly,
 bound to the real source video's own duration, instead of relying on
 `-shortest` to cut the output off.
 
+## Image carousel template (`template_carousel.py`)
+
+The only tool here that isn't ffmpeg/video at all - it builds an Instagram
+"prompt reveal" image carousel from a folder of numbered photos, using
+PIL/Pillow instead of ffmpeg. Nothing gets resized away from your base
+photo's own resolution - every slide comes out at exactly that size.
+
+Folder layout it expects:
+```
+1.jpg              <- BASE/TEMPLATE photo: defines the scene AND the exact
+                      output canvas size for every slide
+2.jpg   2a.jpg      <- pair #2: 2.jpg = original reference face photo,
+                      2a.jpg = the AI "after" result (same scene as the
+                      base photo, new face)
+3.jpg   3a.jpg      <- pair #3, same idea - as many pairs as you have
+```
+("a"/"A" both work, and .jpg/.jpeg/.png/.webp can mix freely.)
+
+```
+python template_carousel.py my_carousel_folder/ -o carousel_out
+python template_carousel.py my_carousel_folder/ -o out --logo prompts_drive
+python template_carousel.py my_carousel_folder/ -o out --prompt-text "RECIPE"
+```
+
+Output is one carousel of slides, always in this order:
+1. **Cover** (`01_cover.jpg`) — the base photo + a big bold "PROMPT" text
+   stretched near the top edges + "— SWIPE →" near the bottom.
+2. **One reveal slide per pair** (`02_slide.jpg`, `03_slide.jpg`, ...) — the
+   pair's "a" result photo, full-bleed (cropped-to-fill if its aspect ratio
+   doesn't match the base photo), with a small rounded-corner inset of that
+   pair's *original* face photo bottom-right, and a pill-shaped page-number
+   badge top-right (e.g. `2/4`).
+3. **CTA** (last slide, e.g. `04_cta.jpg`) — the base photo again, darkened,
+   with "COMMENT FOR" (underlined) / "PROMPT" centered, and your logo
+   underneath. Always present, even with just one pair.
+
+If a pair is incomplete (only `N` or only `Na`, not both), it's skipped
+with a warning - the carousel just ends up with fewer slides. Nothing is
+auto-generated to fill a gap.
+
+**Picking a logo for the CTA slide:** same convention as `add_logo.py` -
+register one as a named preset in `LOGO_PRESETS` at the top of
+`template_carousel.py`, or pass a raw PNG path to `--logo`. None are
+registered yet (no carousel logo attached so far) - `--logo` is optional
+and the CTA slide just skips the logo block if omitted.
+
+- `--prompt-text` / `--swipe-text` — cover slide's two text lines (default:
+  `"PROMPT"` / `"SWIPE"`).
+- `--cta-line1` / `--cta-line2` — CTA slide's two text lines (default:
+  `"COMMENT FOR"` / `"PROMPT"`).
+- `--font` — path to a bold `.ttf`/`.otf`; auto-detected across
+  Linux/Windows/Mac if omitted (fails with a clear message if none found).
+
+All position/size percentages (text margins, inset size, badge size, CTA
+dim opacity, logo size) are constants at the top of the file
+(`PROMPT_TOP_MARGIN_PCT`, `INSET_WIDTH_PCT`, `CTA_DIM_OPACITY`, etc.),
+expressed as a % of the canvas rather than fixed pixels, so they hold up
+across different base-photo resolutions - edit them directly for a
+permanent look change instead of passing flags every run.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, silence removal, reframing, and
