@@ -805,15 +805,43 @@ and the CTA slide just skips the logo block if omitted.
   `"PROMPT"` / `"SWIPE"`).
 - `--cta-line1` / `--cta-line2` — CTA slide's two text lines (default:
   `"COMMENT FOR"` / `"PROMPT"`).
-- `--font` — path to a bold `.ttf`/`.otf`; auto-detected across
-  Linux/Windows/Mac if omitted (fails with a clear message if none found).
+- `--font` — path to a bold `.ttf`/`.otf`. Defaults to **Archivo Black**
+  (Google Fonts, free/SIL OFL), identified by rendering several bold-sans
+  candidates at the reference photos' own cap-height and comparing
+  letterforms directly (R's leg angle, M's vertex depth, O's roundness) -
+  Archivo Black matched clearly better than Poppins/Montserrat/Inter
+  Black. Downloaded once and cached at
+  `~/.cache/ffmpeg-bulk-cutter/ArchivoBlack.ttf` (same convention as the
+  mediapipe model downloads below); falls back to a system bold sans if
+  the download fails (no network).
+- `--no-text-behind-subject` — disable the cover slide's "text behind
+  subject" effect (see below); on by default.
 
 All position/size percentages (text margins, inset size, badge size, CTA
 dim opacity, logo size) are constants at the top of the file
 (`PROMPT_TOP_MARGIN_PCT`, `INSET_WIDTH_PCT`, `CTA_DIM_OPACITY`, etc.),
 expressed as a % of the canvas rather than fixed pixels, so they hold up
 across different base-photo resolutions - edit them directly for a
-permanent look change instead of passing flags every run.
+permanent look change instead of passing flags every run. The
+`PROMPT_TOP_MARGIN_PCT`/`PROMPT_SIDE_MARGIN_PCT`/`SWIPE_FONT_PCT`/
+`SWIPE_BOTTOM_MARGIN_PCT` values specifically were measured directly off
+the reference cover photos (pixel bounding-box scan of the near-white
+text), not eyeballed - they're a locked-in preset, not a starting guess.
+
+**Text behind subject:** on the cover slide, wherever the person in your
+base photo overlaps the "PROMPT" text (hair, head, smoke, whatever), the
+person renders in front instead of the text getting drawn over them -
+matching the layered look in the reference photos. Works by running
+MediaPipe's selfie-segmentation model on the base photo to get a soft,
+per-pixel "how much does this look like a person" mask, drawing the text
+first, then re-pasting the original photo on top through that mask - so
+the person "wins" only where they actually are, and the background scene
+elsewhere still shows the text on top, untouched. The model
+(`selfie_segmenter.tflite`, ~250KB) downloads once and caches at
+`~/.cache/ffmpeg-bulk-cutter/`, same convention as `face_tracking.py`'s
+face/hand landmark models. Verified with a pixel-level diff against a
+text-only render: the only pixels that change are exactly the person's
+silhouette, nothing scattered elsewhere.
 
 ## Full pipeline (one command)
 

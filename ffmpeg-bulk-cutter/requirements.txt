@@ -15,8 +15,9 @@ transformers
 # comment out "torch" above and uncomment this CPU-only build:
 # torch --index-url https://download.pytorch.org/whl/cpu
 
-# Only needed for reframe.py --track-faces (smart subject-tracking crop).
-# CPU-only, no torch needed - detection runs fine without a GPU.
+# Only needed for reframe.py --track-faces (smart subject-tracking crop)
+# and template_carousel.py's text-behind-subject effect. CPU-only, no
+# torch needed - detection runs fine without a GPU.
 opencv-python-headless
 mediapipe
 
@@ -24,3 +25,7 @@ mediapipe
 # free local model) - lets you skip torch/transformers entirely if you only
 # ever use --groq for Hinglish.
 requests
+
+# Only needed for template_carousel.py (the image carousel template) -
+# every other tool here shells out to ffmpeg instead.
+Pillow

@@ -38,8 +38,11 @@ Usage:
 import argparse
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
+from urllib.request import urlretrieve
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -65,9 +68,15 @@ DEFAULT_SWIPE_TEXT = "SWIPE"
 DEFAULT_CTA_LINE1 = "COMMENT FOR"
 DEFAULT_CTA_LINE2 = "PROMPT"
 
-PROMPT_TOP_MARGIN_PCT = 0.045          # cover slide: "PROMPT" text top edge, as % of canvas height
-PROMPT_SIDE_MARGIN_PCT = 0.035         # cover slide: max text width = canvas width minus 2x this
-SWIPE_BOTTOM_MARGIN_PCT = 0.055        # cover slide: "SWIPE" text baseline distance from bottom
+# Measured directly off your 3 reference cover photos (pixel bounding-box
+# scan of the near-white text region) - these match all three exactly, so
+# they're locked in as the preset rather than left to auto-fit guesswork.
+PROMPT_TOP_MARGIN_PCT = 0.053           # cover slide: "PROMPT" text top edge, as % of canvas height
+PROMPT_SIDE_MARGIN_PCT = 0.033          # cover slide: max text width = canvas width minus 2x this (fits to ~93% width)
+SWIPE_FONT_PCT = 0.024                  # cover slide: "SWIPE" font size, as % of canvas height
+SWIPE_BOTTOM_MARGIN_PCT = 0.045         # cover slide: "SWIPE" text baseline distance from bottom
+
+TEXT_BEHIND_SUBJECT = True              # cover slide: layer the person back over the PROMPT text wherever they overlap (see person_confidence_mask)
 
 INSET_WIDTH_PCT = 0.30                 # reveal slide: inset (original face) width, as % of canvas width
 INSET_MARGIN_PCT = 0.045               # reveal slide: inset distance from right/bottom edges
@@ -85,8 +94,18 @@ CTA_LOGO_BOTTOM_MARGIN_PCT = 0.06      # cta slide: logo distance from bottom ed
 
 # ============================================================================
 
-# Bold sans-serif candidates, checked in order, across OSes - override with
-# --font if none of these exist on your machine.
+# The reference photos' "PROMPT" text was identified by rendering several
+# free bold-sans candidates at the reference's own cap-height and comparing
+# letterforms directly (R's leg angle, M's vertex depth, O's roundness) -
+# Archivo Black (Google Fonts, SIL OFL - free to use/redistribute) was the
+# closest match by a clear margin over Poppins/Montserrat/Inter Black.
+# Downloaded on first use and cached, same convention as the mediapipe
+# model downloads in face_tracking.py - keeps this out of git as a binary.
+FONT_URL = "https://fonts.gstatic.com/s/archivoblack/v23/HTxqL289NzCGg4MzN6KJ7eW6OYs.ttf"
+FONT_CACHE = Path.home() / ".cache" / "ffmpeg-bulk-cutter" / "ArchivoBlack.ttf"
+
+# Fallback bold sans-serif candidates, only used if the Archivo Black
+# download fails (no network) - override either way with --font.
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -96,19 +115,68 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
 ]
 
+# Selfie segmentation model (person vs. background), used for the
+# text-behind-subject effect on the cover slide - same download-and-cache
+# convention as face_tracking.py's face/hand landmark models.
+SEGMENTER_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"
+SEGMENTER_MODEL_CACHE = Path.home() / ".cache" / "ffmpeg-bulk-cutter" / "selfie_segmenter.tflite"
+
 
 def find_font(explicit: str = None) -> str:
     if explicit:
         if not Path(explicit).exists():
             sys.exit(f"--font {explicit!r} not found")
         return explicit
+    if not FONT_CACHE.exists():
+        try:
+            FONT_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            print("  Downloading PROMPT font (Archivo Black, one-time, ~90KB)...")
+            urlretrieve(FONT_URL, FONT_CACHE)
+        except Exception as e:
+            print(f"  WARNING: couldn't download Archivo Black ({e}), falling back to a system font")
+        else:
+            return str(FONT_CACHE)
+    else:
+        return str(FONT_CACHE)
     for candidate in FONT_CANDIDATES:
         if Path(candidate).exists():
             return candidate
     sys.exit(
-        "No bold sans-serif font found on this machine. Pass one explicitly with "
-        "--font /path/to/some-bold.ttf (any .ttf/.otf works)."
+        "No bold sans-serif font found on this machine, and the Archivo Black download "
+        "failed. Pass one explicitly with --font /path/to/some-bold.ttf (any .ttf/.otf works)."
     )
+
+
+def _get_segmenter_model_path() -> Path:
+    if not SEGMENTER_MODEL_CACHE.exists():
+        SEGMENTER_MODEL_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        print("  Downloading person-segmentation model (one-time, ~250KB)...")
+        urlretrieve(SEGMENTER_MODEL_URL, SEGMENTER_MODEL_CACHE)
+    return SEGMENTER_MODEL_CACHE
+
+
+@lru_cache(maxsize=1)
+def _load_segmenter():
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision
+
+    base_options = mp_python.BaseOptions(model_asset_path=str(_get_segmenter_model_path()))
+    options = vision.ImageSegmenterOptions(base_options=base_options, output_confidence_masks=True)
+    return vision.ImageSegmenter.create_from_options(options)
+
+
+def person_confidence_mask(img: Image.Image) -> Image.Image:
+    """Returns an 'L' mode mask, same size as img, of how much each pixel
+    looks like a person (255) vs. background (0) - soft-edged (hair
+    wisps/smoke come out semi-transparent, not a hard cutout)."""
+    import mediapipe as mp
+
+    segmenter = _load_segmenter()
+    rgb = np.array(img.convert("RGB"))
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+    result = segmenter.segment(mp_image)
+    confidence = result.confidence_masks[0].numpy_view().squeeze()
+    return Image.fromarray((confidence * 255).astype("uint8"), mode="L")
 
 
 def _resolve_logo_path(logo: str) -> Path:
@@ -202,20 +270,31 @@ def rounded_alpha_mask(size: tuple, radius: int) -> Image.Image:
     return mask
 
 
-def build_cover_slide(base_img: Image.Image, font_path: str, prompt_text: str, swipe_text: str) -> Image.Image:
-    canvas = base_img.copy().convert("RGB")
+def build_cover_slide(base_img: Image.Image, font_path: str, prompt_text: str, swipe_text: str,
+                       text_behind_subject: bool = TEXT_BEHIND_SUBJECT) -> Image.Image:
+    base_rgb = base_img.convert("RGB")
+    canvas = base_rgb.copy()
     w, h = canvas.size
     draw = ImageDraw.Draw(canvas)
 
     prompt_font = fit_font(prompt_text, font_path, w - 2 * round(w * PROMPT_SIDE_MARGIN_PCT), start_size=round(h * 0.1))
     draw_text_centered_x(draw, prompt_text, prompt_font, w, round(h * PROMPT_TOP_MARGIN_PCT))
 
-    swipe_font = ImageFont.truetype(font_path, round(h * 0.028))
+    swipe_font = ImageFont.truetype(font_path, round(h * SWIPE_FONT_PCT))
     dashed = f"\u2014 {swipe_text} \u2192"
     bbox = swipe_font.getbbox(dashed)
     text_h = bbox[3] - bbox[1]
     bottom_y = h - round(h * SWIPE_BOTTOM_MARGIN_PCT) - text_h
     draw_text_centered_x(draw, dashed, swipe_font, w, bottom_y)
+
+    if text_behind_subject:
+        # Re-paste the person back on top wherever they overlap the text
+        # we just drew - everywhere else (no person) the text stays as
+        # drawn on top of the background, exactly like the reference
+        # photos where the subject's hair/head/smoke sits in front of the
+        # "PROMPT" lettering.
+        mask = person_confidence_mask(base_rgb)
+        canvas.paste(base_rgb, (0, 0), mask)
     return canvas
 
 
@@ -292,7 +371,7 @@ def build_cta_slide(base_img: Image.Image, font_path: str, line1: str, line2: st
 
 
 def build_carousel(folder: Path, output_dir: Path, font_path: str, prompt_text: str, swipe_text: str,
-                    cta_line1: str, cta_line2: str, logo_path: Path = None):
+                    cta_line1: str, cta_line2: str, logo_path: Path = None, text_behind_subject: bool = TEXT_BEHIND_SUBJECT):
     base_path, pairs = discover_pairs(folder)
     base_img = Image.open(base_path)
     canvas_size = base_img.size
@@ -300,7 +379,7 @@ def build_carousel(folder: Path, output_dir: Path, font_path: str, prompt_text: 
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cover = build_cover_slide(base_img, font_path, prompt_text, swipe_text)
+    cover = build_cover_slide(base_img, font_path, prompt_text, swipe_text, text_behind_subject)
     cover.save(output_dir / "01_cover.jpg", quality=95)
     print(f"  [1/{total_pages}] 01_cover.jpg")
 
@@ -327,7 +406,8 @@ def main():
     parser.add_argument("--swipe-text", default=DEFAULT_SWIPE_TEXT, help=f"Cover slide bottom text (default: {DEFAULT_SWIPE_TEXT!r})")
     parser.add_argument("--cta-line1", default=DEFAULT_CTA_LINE1, help=f"CTA slide small top line (default: {DEFAULT_CTA_LINE1!r})")
     parser.add_argument("--cta-line2", default=DEFAULT_CTA_LINE2, help=f"CTA slide big bottom line (default: {DEFAULT_CTA_LINE2!r})")
-    parser.add_argument("--font", help="Path to a .ttf/.otf bold font (auto-detected if omitted)")
+    parser.add_argument("--font", help="Path to a .ttf/.otf bold font (defaults to Archivo Black, matched against the reference photos - downloaded once and cached)")
+    parser.add_argument("--no-text-behind-subject", action="store_true", help="Disable layering the person back over the PROMPT text on the cover slide (on by default)")
     args = parser.parse_args()
 
     if not args.input.exists() or not args.input.is_dir():
@@ -338,7 +418,7 @@ def main():
 
     print(f"Building carousel from {args.input}/ ...")
     build_carousel(args.input, args.output_dir, font_path, args.prompt_text, args.swipe_text,
-                    args.cta_line1, args.cta_line2, logo_path)
+                    args.cta_line1, args.cta_line2, logo_path, not args.no_text_behind_subject)
     print(f"\nDone. Slides in {args.output_dir}/")
 
 
