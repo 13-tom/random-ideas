@@ -29,3 +29,9 @@ requests
 # Only needed for template_carousel.py (the image carousel template) -
 # every other tool here shells out to ffmpeg instead.
 Pillow
+
+# Only needed for remove_logo.py's row-band detection (numpy already
+# comes in as a transitive dependency of opencv/mediapipe/torch above,
+# but pinning it explicitly here since this is the first tool that
+# imports it directly).
+numpy

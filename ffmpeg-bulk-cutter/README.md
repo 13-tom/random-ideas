@@ -843,6 +843,56 @@ face/hand landmark models. Verified with a pixel-level diff against a
 text-only render: the only pixels that change are exactly the person's
 silhouette, nothing scattered elsewhere.
 
+## Removing a burned-in logo (`remove_logo.py`)
+
+For your own old posts where you lost the source files and had to
+re-download them from Instagram - built specifically for the "Evolving AI"
+repost-template layout: an account-info block (avatar circle + name + blue
+checkmark + `@handle`) sitting on a **solid black letterbox bar** above
+the video, with a separate caption line below it, then the real video
+content below that. The block's position varies from video to video (the
+black bar's height depends on that clip's own letterboxing), but stays
+fixed for the whole length of any one video.
+
+Because the block sits on a *flat, solid-color* bar rather than on top of
+moving video pixels, this doesn't need blur-prone inpainting at all: it
+detects the exact row-band the block occupies and repaints that exact
+band with the true background color (sampled from the band's own
+corners, not assumed to be pure `#000`) - since the fill matches the real
+background exactly, the result is seamless rather than approximated.
+
+```
+python remove_logo.py clip.mp4 -o clean.mp4
+python remove_logo.py clips/ -o clean_clips
+python remove_logo.py clips/ -o clean_clips --debug   # preview only, no video output
+```
+
+**Detection**, per video: sample one frame, scan rows top-down for the
+fraction of the row's width that's non-black. The topmost contiguous
+band of "some but not most of the row is non-black" is the logo block
+(text/avatar rows never come close to filling the frame width); a row
+that's ~85%+ non-black is real video content, not text, and detection
+stops there. Refuses to guess (skips the clip with a warning) if: the
+frame has no solid-black margin above the first non-black row (not a
+letterbox at all), or the first band runs straight into real video
+content with no gap back to black (not a clean isolated block) - in both
+cases blindly filling would either miss the logo or eat real footage.
+
+**Always run `--debug` first on a new batch**: it saves a `*_debug.png`
+per clip with the detected removal box drawn in red, instead of
+processing video - a 2-second check that the box lands exactly on the
+logo before trusting a real (slower) encode. Verified directly against 2
+real sample videos (15s and 2min, one detected band each: rows 266-345
+and 313-392) - output frames checked at multiple timestamps (including
+60s into the 2-minute clip) confirm the account-info block is gone, the
+caption line and video content are untouched, and there's no visible
+seam at the fill boundary.
+
+If a video's logo sits directly on top of moving footage instead of a
+letterbox bar (no clean solid-black margin around it), this tool isn't
+the right one for it - that needs real video inpainting, a much heavier
+build than the row-band-refill approach here.
+
 ## Full pipeline (one command)
 
 `run_pipeline.py` chains cutting, silence removal, reframing, and
