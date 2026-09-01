@@ -5,10 +5,10 @@ Reels/Stories (9:16), square (1:1), portrait (4:5), or landscape (16:9)
 aspect ratio, and generate free local subtitles — plain, one-word-at-a-time,
 or Opus Clip-style highlighted captions. Works on Windows, Mac, and Linux,
 and on any hardware: it runs on
-CPU by default, and automatically speeds up using an NVIDIA GPU
-(CUDA/NVENC) if one is detected — no setup needed either way, and it safely
-falls back to CPU if GPU encoding fails for any reason (e.g. a
-missing/outdated driver).
+CPU by default, and automatically speeds up using a hardware encoder if
+one is detected — NVIDIA NVENC on Windows/Linux, Apple VideoToolbox on
+any Mac — no setup needed either way, and it safely falls back to CPU if
+GPU encoding fails for any reason (e.g. a missing/outdated driver).
 
 ## Setup
 
@@ -133,20 +133,40 @@ python add_subtitles.py clips -o subtitled --burn
 
 ## GPU support
 
-If an NVIDIA GPU is detected (`nvidia-smi` works and ffmpeg has
-`h264_nvenc`), all three scripts automatically use it:
-- `cut_clips.py --reencode` and `add_subtitles.py --burn` encode with
-  `h264_nvenc` instead of CPU `libx264`
+Two hardware encoders are supported, auto-detected the same way on every
+script (see `gpu_utils.py`):
+- **NVIDIA NVENC** (`h264_nvenc`) — Windows/Linux with an NVIDIA GPU and
+  driver, detected via `nvidia-smi` + ffmpeg's compiled-in encoder list.
+- **Apple VideoToolbox** (`h264_videotoolbox`) — every Mac, Intel or
+  Apple Silicon. No discrete GPU needed - it's a hardware encoder built
+  into the OS, and Homebrew's `ffmpeg` has it compiled in by default, so
+  it works out of the box with no extra setup.
+
+Every script picks whichever one is actually available and uses it
+automatically:
+- `cut_clips.py --reencode`, `add_subtitles.py --burn`, and every video
+  template/tool here encode with the detected hardware encoder instead of
+  CPU `libx264`
 - `add_subtitles.py` and `run_pipeline.py` load Whisper/Hinglish models on
-  CUDA (float16) instead of CPU (int8)
+  CUDA (float16) instead of CPU (int8) - this part is NVIDIA-only, since
+  faster-whisper's backend has no Apple Silicon (MPS) support; on Mac
+  these always run on CPU regardless of the video encoder used
 
 Pass `--no-gpu` to any script to force CPU. If GPU encoding fails at
 runtime for any reason, it automatically retries on CPU and prints a
-message — it won't silently produce a broken file.
+message — it won't silently produce a broken file. A couple of
+GPU-dependent steps (MediaPipe-based face tracking, and any pipe-based
+frame-by-frame encoder with no retry path) do a real one-frame throwaway
+encode up front to verify the hardware encoder actually works before
+committing to a whole video, rather than trusting "is it compiled in"
+alone - the same real-world failure mode (an encoder that's compiled in
+but fails at runtime due to a driver/OS issue) can happen with either
+NVENC or VideoToolbox.
 
 Note: `pip install -r requirements.txt` installs the standard torch build
 (supports GPU or CPU). If you don't have an NVIDIA GPU and want a smaller
-download, see the comment in `requirements.txt` for the CPU-only build.
+download, see the comment in `requirements.txt` for the CPU-only build -
+this applies on Mac too, since torch's CUDA build is irrelevant there.
 
 ## Removing silence (jump cuts)
 

@@ -110,13 +110,13 @@ def _video_filter(zoom: float) -> str:
 def _gpu_error_reason(stderr: bytes) -> str:
     """ffmpeg's actual failure reason is usually a few lines before its
     generic final "Conversion failed!" banner - prefer a line that looks
-    like a real error/nvenc message, falling back to the last line."""
+    like a real error/hw-encoder message, falling back to the last line."""
     lines = stderr.decode(errors="replace").strip().splitlines()
     if not lines:
         return ""
     for line in reversed(lines):
         lowered = line.lower()
-        if "nvenc" in lowered or "error" in lowered or "failed" in lowered and "conversion failed" not in lowered:
+        if "nvenc" in lowered or "videotoolbox" in lowered or "error" in lowered or "failed" in lowered and "conversion failed" not in lowered:
             return line.strip()
     return lines[-1].strip()
 
@@ -168,7 +168,7 @@ def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu:
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "aac", "-shortest", str(framed_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", "-shortest", str(framed_path)],
         ["-c:v", "libx264", "-c:a", "aac", "-shortest", str(framed_path)],
         use_gpu,
     )
@@ -195,7 +195,7 @@ def burn_ass(video_path: Path, ass_path: Path, output_path: Path, use_gpu: bool)
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vf", f"subtitles={escaped}"]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "copy", str(output_path)],
         ["-c:v", "libx264", "-c:a", "copy", str(output_path)],
         use_gpu,
     )
@@ -284,7 +284,7 @@ def main():
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen caption line (default: 5)")
     parser.add_argument("--caption-position", choices=["bottom", "middle", "top"], default="top", help="Vertical anchor for captions: top = grows down from --caption-y (default, matches the reference template), bottom = grows up from --caption-y measured off the bottom edge, middle = vertically centered on --caption-y (default: top)")
     parser.add_argument("--caption-y", type=int, default=None, help=f"Manually override the caption's vertical position in pixels, instead of editing CAPTION_MARGIN_TOP/CAPTION_GAP in the script. Meaning depends on --caption-position (top = distance from canvas top, bottom = distance from canvas bottom, middle = distance from canvas top to the centered text). Default: {CAPTION_MARGIN_TOP} (computed from VIDEO_Y/VIDEO_BOX_H/CAPTION_GAP below the video box)")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language (en/hi/auto/hinglish). Faster, no local torch/transformers install needed, real per-word timestamps - but costs money and needs internet + an API key.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
     parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo)")
@@ -317,7 +317,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     gpu_requested = not args.no_gpu
-    use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+    use_gpu_encode = gpu_requested and gpu_utils.gpu_available()
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
 
     model = pipe = groq_api_key = None

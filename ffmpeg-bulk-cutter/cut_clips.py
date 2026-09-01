@@ -103,7 +103,7 @@ def cut_clip(input_path: Path, start: float, end: float, output_path: Path, reen
         return
 
     if use_gpu:
-        gpu_cmd = _base_cut_cmd(input_path, start, end) + ["-c:v", "h264_nvenc", "-c:a", "aac", str(output_path)]
+        gpu_cmd = _base_cut_cmd(input_path, start, end) + ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", str(output_path)]
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return
@@ -124,7 +124,7 @@ def main():
         help="Re-encode for frame-accurate cuts instead of fast stream copy "
              "(use this if clips start a bit early/late or with a black flash)",
     )
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU encoding even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU encoding even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -142,9 +142,9 @@ def main():
     except ValueError as e:
         sys.exit(str(e))
 
-    use_gpu = args.reencode and not args.no_gpu and gpu_utils.has_nvenc()
+    use_gpu = args.reencode and not args.no_gpu and gpu_utils.gpu_available()
     if args.reencode:
-        print(f"Re-encoding with {'GPU (h264_nvenc)' if use_gpu else 'CPU (libx264)'}")
+        print(f"Re-encoding with {'GPU (' + gpu_utils.encoder_name() + ')' if use_gpu else 'CPU (libx264)'}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     suffix = args.input.suffix

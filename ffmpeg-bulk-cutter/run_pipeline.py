@@ -20,8 +20,9 @@ so cutting silence first means the caption timestamps naturally match the
 already-shortened timeline (see remove_silence.py for why this order
 matters).
 
-Automatically uses an NVIDIA GPU for encoding and transcription if one is
-detected, falling back to CPU otherwise (see gpu_utils.py). Use --no-gpu to
+Automatically uses a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) if
+one is detected, falling back to CPU otherwise (see gpu_utils.py).
+Transcription GPU acceleration (CUDA) is NVIDIA-only. Use --no-gpu to
 force CPU.
 """
 import argparse
@@ -69,7 +70,7 @@ def main():
     parser.add_argument("--box", action="store_true", help="Highlight the active word with a solid colored background box instead of colored text (Opus Clip style)")
     parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language. See add_subtitles.py --help for details.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
     parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo)")
@@ -98,7 +99,7 @@ def main():
         sys.exit(str(e))
 
     gpu_requested = not args.no_gpu
-    use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+    use_gpu_encode = gpu_requested and gpu_utils.gpu_available()
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
 
     clips_dir = args.output_dir / "clips"
@@ -153,7 +154,7 @@ def main():
         if args.track_faces:
             import face_tracking
             target_res = reframe.ASPECT_PRESETS[args.aspect][1]
-            use_gpu_track = not args.no_gpu and gpu_utils.nvenc_works()
+            use_gpu_track = not args.no_gpu and gpu_utils.gpu_verified()
             if args.track_mode == "fanpage":
                 import fanpage_crop
         for i, clip_path in enumerate(clip_paths, start=1):

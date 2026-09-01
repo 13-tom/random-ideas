@@ -101,7 +101,7 @@ def reframe_video(input_path: Path, output_path: Path, aspect: str, use_gpu: boo
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf]
 
     if use_gpu:
-        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
+        gpu_cmd = base_cmd + ["-c:v", gpu_utils.encoder_name(), "-c:a", "copy", str(output_path)]
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return
@@ -120,7 +120,7 @@ def main():
     parser.add_argument("--track-mode", choices=["dynamic", "static", "fanpage"], default="dynamic", help="dynamic = pan to follow the subject (default). static = one fixed, face-informed crop position for the whole clip - no panning, so no possible camera shake. fanpage = tighter zoom on a lone subject, slower/steadier pan, and automatically eases out to a wider crop that fits everyone when a 2nd person enters frame (see fanpage_crop.py). Only relevant with --track-faces.")
     parser.add_argument("--zoom-on-gesture", action="store_true", help="Ease out to a wider crop when a hand is detected (gesturing) so it doesn't get clipped by the tight face crop, then ease back in once the hand is gone. Only relevant with --track-faces --track-mode dynamic.")
     parser.add_argument("--gpu-detect", action="store_true", help="Opportunistically try MediaPipe's GPU delegate for face detection (experimental, falls back to CPU automatically). Only relevant with --track-faces.")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -141,7 +141,7 @@ def main():
     if args.track_faces:
         import face_tracking
         target_res = ASPECT_PRESETS[args.aspect][1]
-        use_gpu = not args.no_gpu and gpu_utils.nvenc_works()
+        use_gpu = not args.no_gpu and gpu_utils.gpu_verified()
         if args.track_mode == "fanpage":
             import fanpage_crop
         for i, video_path in enumerate(videos, start=1):
@@ -152,7 +152,7 @@ def main():
             else:
                 face_tracking.track_and_crop(video_path, output_path, args.aspect, target_res, use_gpu, reframe_video, args.gpu_detect, args.track_mode, args.zoom_on_gesture)
     else:
-        use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
+        use_gpu = not args.no_gpu and gpu_utils.gpu_available()
         for i, video_path in enumerate(videos, start=1):
             output_path = args.output_dir / video_path.name
             print(f"[{i}/{len(videos)}] {video_path.name} -> {args.aspect}  =>  {output_path}")

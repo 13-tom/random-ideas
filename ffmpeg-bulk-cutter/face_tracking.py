@@ -18,6 +18,7 @@ from urllib.request import urlretrieve
 
 import numpy as np
 
+import gpu_utils
 from reframe import ASPECT_RATIOS
 
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
@@ -395,7 +396,7 @@ def _fixed_crop_video(input_path: Path, output_path: Path, x: int, y: int, crop_
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf]
 
     if use_gpu:
-        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
+        gpu_cmd = base_cmd + ["-c:v", gpu_utils.encoder_name(), "-c:a", "copy", str(output_path)]
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return
@@ -501,7 +502,7 @@ def track_and_crop(input_path: Path, output_path: Path, aspect: str, target_res:
         "-i", str(input_path),
         "-map", "0:v", "-map", "1:a?",
         "-vf", f"scale={target_res}:flags=lanczos",
-        "-c:v", "h264_nvenc" if use_gpu else "libx264", "-c:a", "copy",
+        "-c:v", gpu_utils.encoder_name() if use_gpu else "libx264", "-c:a", "copy",
         "-shortest", str(output_path),
     ]
     proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)

@@ -409,7 +409,7 @@ def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, use_gpu:
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(video_path), "-vf", f"subtitles={escaped_srt}"]
 
     if use_gpu:
-        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)]
+        gpu_cmd = base_cmd + ["-c:v", gpu_utils.encoder_name(), "-c:a", "copy", str(output_path)]
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return
@@ -493,7 +493,7 @@ def main():
     parser.add_argument("--box", action="store_true", help="Highlight the active word with a solid colored background box instead of just colored text (closer to Opus Clip's look). Uses --highlight-color as the box fill.")
     parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language. Faster, no local torch/transformers install needed, and gives real per-word timestamps - but costs money and needs internet + an API key.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
     parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo). See add_subtitles_groq.py for the dedicated Groq-only version of this tool.")
@@ -527,7 +527,7 @@ def main():
 
     gpu_requested = not args.no_gpu
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
-    use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+    use_gpu_encode = gpu_requested and gpu_utils.gpu_available()
 
     common_kwargs = dict(
         caption_style=args.caption_style, style=style, max_words=args.max_words,

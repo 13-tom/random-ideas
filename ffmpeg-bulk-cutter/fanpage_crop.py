@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+import gpu_utils
 from face_tracking import (
     HEADROOM_FRACTION,
     SAMPLE_INTERVAL_SEC,
@@ -199,7 +200,7 @@ def fanpage_track_and_crop(input_path: Path, output_path: Path, aspect, target_r
         "-i", str(input_path),
         "-map", "0:v", "-map", "1:a?",
         "-vf", f"scale={target_res}:flags=lanczos",
-        "-c:v", "h264_nvenc" if use_gpu else "libx264", "-c:a", "copy",
+        "-c:v", gpu_utils.encoder_name() if use_gpu else "libx264", "-c:a", "copy",
         "-shortest", str(output_path),
     ]
     proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)

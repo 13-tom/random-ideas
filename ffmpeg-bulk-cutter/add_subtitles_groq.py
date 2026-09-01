@@ -189,7 +189,7 @@ def main():
     parser.add_argument("--box", action="store_true", help="Highlight the active word with a solid colored background box instead of just colored text (closer to Opus Clip's look). Uses --highlight-color as the box fill.")
     parser.add_argument("--position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical placement of captions (default: bottom)")
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen line for --caption-style highlight (default: 5)")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected (only affects burning, not transcription - that always runs on Groq's servers)")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected (only affects burning, not transcription - that always runs on Groq's servers)")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -225,7 +225,7 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    use_gpu_encode = not args.no_gpu and gpu_utils.has_nvenc()
+    use_gpu_encode = not args.no_gpu and gpu_utils.gpu_available()
 
     print(f"Using Groq API ({args.groq_model}) for Hinglish transcription (paid)")
     failures = []

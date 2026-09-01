@@ -167,7 +167,7 @@ def compose_frame(tracked_path: Path, mask_path: Path, framed_path: Path, durati
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "aac", "-shortest", str(framed_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", "-shortest", str(framed_path)],
         ["-c:v", "libx264", "-c:a", "aac", "-shortest", str(framed_path)],
         use_gpu,
     )
@@ -260,7 +260,7 @@ def main():
     parser.add_argument("--fade-h", type=int, default=DEFAULT_FADE_H, help=f"Height (pixels) of the fade at the video's bottom edge, measured up from the video box's own bottom - 0 disables the fade for a hard edge (default: {DEFAULT_FADE_H})")
     parser.add_argument("--caption-position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical anchor for captions (default: bottom - sits inside the video's solid area, above the fade)")
     parser.add_argument("--caption-y", type=int, default=None, help="Manually override the caption's vertical position in pixels, instead of using the default (which auto-adjusts to sit just above the fade zone based on --video-y/--video-h/--fade-h). Meaning depends on --caption-position.")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language. See add_subtitles.py --help for details.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
     parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo)")
@@ -301,15 +301,15 @@ def main():
     _make_fade_mask(mask_path, args.video_h, args.fade_h)
 
     gpu_requested = not args.no_gpu
-    use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+    use_gpu_encode = gpu_requested and gpu_utils.gpu_available()
     # The tracking step (fanpage_crop.py) pipes decoded frames straight into
     # ffmpeg's stdin - if the GPU encoder fails to open partway through
     # (e.g. an nvenc API version mismatch against the installed driver,
     # confirmed via a real user report), there's no cheap way to retry with
     # CPU mid-stream, so it needs the real functional check up front instead
-    # of just "is h264_nvenc compiled in" (has_nvenc() can be True with a
-    # driver too old/broken to actually use it).
-    use_gpu_track = gpu_requested and gpu_utils.nvenc_works()
+    # of just "is a hardware encoder compiled in" (gpu_available() can be
+    # True with a driver too old/broken to actually use it).
+    use_gpu_track = gpu_requested and gpu_utils.gpu_verified()
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
 
     model = pipe = groq_api_key = None

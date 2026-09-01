@@ -130,7 +130,7 @@ def remove_logo(input_path: Path, output_path: Path, use_gpu: bool, band):
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "copy", str(output_path)],
         ["-c:v", "libx264", "-c:a", "copy", str(output_path)],
         use_gpu,
     )
@@ -141,7 +141,7 @@ def main():
     parser.add_argument("input", type=Path, help="A video file, or a folder of video clips")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("logo_removed"), help="Where to write cleaned videos (default: ./logo_removed)")
     parser.add_argument("--debug", action="store_true", help="Don't process video - just save a preview PNG per clip with the detected removal box drawn on it, so you can check it before trusting a real run")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -157,7 +157,7 @@ def main():
         sys.exit(f"No video files found in {args.input}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
+    use_gpu = not args.no_gpu and gpu_utils.gpu_available()
 
     failures = []
     skipped = []

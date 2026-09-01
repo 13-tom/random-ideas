@@ -77,7 +77,7 @@ def remove_silence(input_path: Path, output_path: Path, use_gpu: bool,
     base_cmd = ["ffmpeg", "-y", "-nostdin", "-i", str(input_path), "-vf", vf, "-af", af]
 
     if use_gpu:
-        gpu_cmd = base_cmd + ["-c:v", "h264_nvenc", "-c:a", "aac", str(output_path)]
+        gpu_cmd = base_cmd + ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", str(output_path)]
         result = subprocess.run(gpu_cmd, capture_output=True)
         if result.returncode == 0:
             return duration, new_duration
@@ -95,7 +95,7 @@ def main():
     parser.add_argument("--min-silence", type=float, default=DEFAULT_MIN_SILENCE, help=f"Minimum gap duration (seconds) to actually cut - shorter pauses are left alone as natural speech rhythm (default: {DEFAULT_MIN_SILENCE})")
     parser.add_argument("--padding", type=float, default=DEFAULT_PADDING, help=f"Seconds of audio kept just before/after each spoken segment so words aren't clipped at the cut (default: {DEFAULT_PADDING})")
     parser.add_argument("--noise-db", default=DEFAULT_NOISE_DB, help=f"Volume threshold below which audio counts as silence (default: {DEFAULT_NOISE_DB})")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -111,7 +111,7 @@ def main():
         sys.exit(f"No video files found in {args.input}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
+    use_gpu = not args.no_gpu and gpu_utils.gpu_available()
 
     for i, video_path in enumerate(videos, start=1):
         output_path = args.output_dir / video_path.name

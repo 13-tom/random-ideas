@@ -94,7 +94,7 @@ def compose_frame(input_path: Path, framed_path: Path, duration: float, use_gpu:
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "aac", str(framed_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", str(framed_path)],
         ["-c:v", "libx264", "-c:a", "aac", str(framed_path)],
         use_gpu,
     )
@@ -178,7 +178,7 @@ def main():
     parser.add_argument("--max-words", type=int, default=5, help="Words per on-screen caption line (default: 5)")
     parser.add_argument("--caption-position", choices=["bottom", "middle", "top"], default="bottom", help="Vertical anchor for captions (default: bottom - sits in the blurred margin below the sharp video)")
     parser.add_argument("--caption-y", type=int, default=DEFAULT_CAPTION_MARGIN_V, help=f"Caption vertical position in pixels. Meaning depends on --caption-position (default: {DEFAULT_CAPTION_MARGIN_V})")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     parser.add_argument("--groq", action="store_true", help="Use Groq's paid hosted Whisper API instead of the free local model, for any --language. See add_subtitles.py --help for details.")
     parser.add_argument("--groq-api-key", default=None, help="Groq API key (get one at https://console.groq.com/keys). Falls back to the GROQ_API_KEY environment variable if not passed.")
     parser.add_argument("--groq-model", default=None, help="Groq Whisper model to use (default: whisper-large-v3-turbo)")
@@ -210,7 +210,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     gpu_requested = not args.no_gpu
-    use_gpu_encode = gpu_requested and gpu_utils.has_nvenc()
+    use_gpu_encode = gpu_requested and gpu_utils.gpu_available()
     use_gpu_whisper = gpu_requested and gpu_utils.has_nvidia_gpu()
 
     model = pipe = groq_api_key = None

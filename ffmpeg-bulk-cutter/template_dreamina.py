@@ -170,7 +170,7 @@ def compose_horizontal(input_path: Path, ass_path: Path, logo_path: Path, output
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "aac", str(output_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", str(output_path)],
         ["-c:v", "libx264", "-c:a", "aac", str(output_path)],
         use_gpu,
     )
@@ -203,7 +203,7 @@ def compose_vertical(input_path: Path, ass_path: Path, logo_path: Path, output_p
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "aac", str(output_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "aac", str(output_path)],
         ["-c:v", "libx264", "-c:a", "aac", str(output_path)],
         use_gpu,
     )
@@ -267,7 +267,7 @@ def main():
     parser.add_argument("--vertical-logo-margin-bottom", type=int, default=VERTICAL_LOGO_MARGIN_BOTTOM, help=f"Distance from the video's own bottom edge to the LOGO'S OWN BOTTOM EDGE, for vertical clips - raise this to clear more space for Instagram's own username/caption overlay (default: {VERTICAL_LOGO_MARGIN_BOTTOM})")
     parser.add_argument("--logo-odd", default=DEFAULT_LOGO_ODD, help="Logo PNG used for odd-numbered clips")
     parser.add_argument("--logo-even", default=DEFAULT_LOGO_EVEN, help="Logo PNG used for even-numbered clips")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -306,7 +306,7 @@ def main():
         sys.exit("No videos matched a title - check that filenames and titles.txt use the same clip numbers.")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
+    use_gpu = not args.no_gpu and gpu_utils.gpu_available()
 
     print(f"Matched {len(matched)}/{len(videos)} video(s) to a title\n")
     failures = []

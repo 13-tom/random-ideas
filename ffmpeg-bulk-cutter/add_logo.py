@@ -104,7 +104,7 @@ def add_logo(input_path: Path, logo_path: Path, output_path: Path, use_gpu: bool
     ]
     _run_with_gpu_fallback(
         base_cmd,
-        ["-c:v", "h264_nvenc", "-c:a", "copy", str(output_path)],
+        ["-c:v", gpu_utils.encoder_name(), "-c:a", "copy", str(output_path)],
         ["-c:v", "libx264", "-c:a", "copy", str(output_path)],
         use_gpu,
     )
@@ -118,7 +118,7 @@ def main():
     parser.add_argument("--logo-width", type=int, default=DEFAULT_LOGO_WIDTH, help=f"Logo width in pixels - height is scaled automatically to preserve its aspect ratio (default: {DEFAULT_LOGO_WIDTH})")
     parser.add_argument("--logo-x", type=int, default=DEFAULT_LOGO_X, help=f"Logo's distance from the video's LEFT edge, in pixels (default: {DEFAULT_LOGO_X})")
     parser.add_argument("--logo-y", type=int, default=DEFAULT_LOGO_Y, help=f"Logo's distance from the video's TOP edge, in pixels (default: {DEFAULT_LOGO_Y})")
-    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if an NVIDIA GPU is detected")
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU even if a GPU encoder (NVIDIA NVENC or Mac VideoToolbox) is detected")
     args = parser.parse_args()
 
     if shutil.which("ffmpeg") is None:
@@ -135,7 +135,7 @@ def main():
         sys.exit(f"No video files found in {args.input}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    use_gpu = not args.no_gpu and gpu_utils.has_nvenc()
+    use_gpu = not args.no_gpu and gpu_utils.gpu_available()
 
     print(f"Using logo: {logo_path}")
     failures = []
