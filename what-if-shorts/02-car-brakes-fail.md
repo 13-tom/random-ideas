@@ -1,12 +1,12 @@
-# What If Your Car Brakes Fail at 100 km/h?
+# What If Your Car Brakes Fail at Highway Speed?
 
 > Format: vertical 9:16, 30–45 seconds. Structure: Hook (0–3s) → Disaster → Science → Survival tip → Loop line.
-> Caption disclaimer: "For awareness only. In an emergency call 112."
+> Caption disclaimer: "For awareness only. In a real emergency, call your local emergency number."
 
 | Time | Visual | Voiceover |
 |---|---|---|
 | 0–3s | Bob driving down a mountain road. Presses brake — pedal sinks to the floor. | "What if you press the brake… and nothing happens?" |
-| 3–8s | Speedometer climbing: 80… 90… 100. Sharp turn ahead. | "Your car is speeding downhill. You have about 10 seconds." |
+| 3–8s | Speedometer needle climbing fast (no numbers shown, so it works for km/h and mph viewers). Sharp turn ahead. | "Your car is speeding downhill. You have about 10 seconds." |
 | 8–14s | Step 1 graphic. Bob pumps the brake pedal fast. | "Step one: pump the brake pedal hard and fast. It can build back some pressure." |
 | 14–20s | Close-up of gear stick, shifting down 5→4→3. Engine RPM rises. | "Step two: shift to a lower gear. The engine itself starts slowing the car." |
 | 20–27s | Bob slowly pulls the handbrake — not yanking it. | "Step three: pull the handbrake slowly. Yank it, and your car can spin out." |

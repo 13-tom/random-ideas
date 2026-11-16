@@ -1,7 +1,7 @@
 # What If You Fall Into a Lake With Your Car?
 
 > Format: vertical 9:16, 30–45 seconds. Structure: Hook (0–3s) → Disaster → Science → Survival tip → Loop line.
-> Caption disclaimer: "For awareness only. In an emergency call 112."
+> Caption disclaimer: "For awareness only. In a real emergency, call your local emergency number."
 
 | Time | Visual | Voiceover |
 |---|---|---|
