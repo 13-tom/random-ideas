@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SJClothes Reel</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+  :root{
+    --paper:#F6F4F0; --ink:#111111; --orange:#FF5B14; --orange2:#FF7A3D; --stone:#8E8478;
+  }
+  html,body{margin:0;background:#1a1a1a;}
+  body.render{background:var(--paper);}
+  #stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--paper);
+    font-family:'Archivo',sans-serif;color:var(--ink);transform-origin:0 0;}
+  body:not(.render) #stage{margin:0 auto;}
+  .panel{position:absolute;overflow:hidden;will-change:transform;}
+  .panel .inner{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 45%;}
+  .panel img.media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;}
+  .panel .ph{position:absolute;inset:0;}
+  .panel .ph svg{width:100%;height:100%;display:block;}
+  .panel .tag{position:absolute;left:22px;top:22px;font:600 20px/1 'Archivo';letter-spacing:.08em;
+    color:rgba(17,17,17,.55);background:rgba(255,255,255,.55);padding:8px 12px;border-radius:6px;white-space:nowrap;}
+  .mask{position:absolute;overflow:hidden;}
+  .mask > span{display:block;will-change:transform;}
+  .anton{font-family:'Anton',sans-serif;font-weight:400;line-height:.92;text-transform:uppercase;}
+  .bodoni{font-family:'Bodoni Moda',serif;}
+  .kicker{position:absolute;font:600 28px/1 'Archivo';letter-spacing:.32em;text-transform:uppercase;}
+  .abs{position:absolute;}
+  #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:90;}
+  #scrim{position:absolute;left:0;right:0;bottom:0;height:1100px;opacity:0;z-index:20;
+    background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.35) 45%,rgba(0,0,0,0) 100%);}
+  #topscrim{position:absolute;left:0;right:0;top:0;height:360px;opacity:0;z-index:20;
+    background:linear-gradient(to bottom,rgba(0,0,0,.45),rgba(0,0,0,0));}
+  #sub{position:absolute;left:50%;top:1490px;transform:translateX(-50%);z-index:60;white-space:nowrap;
+    font:600 40px/1.25 'Archivo';color:#fff;padding:14px 26px;border-radius:14px;background:rgba(17,17,17,.42);opacity:0;}
+  #band{position:absolute;left:0;width:1080px;z-index:40;transform-origin:0 50%;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  #band .t{color:#fff;white-space:nowrap;text-align:center;}
+  #end{position:absolute;inset:0;z-index:50;transform-origin:50% 45%;}
+  #cta{position:absolute;left:540px;top:1300px;width:600px;height:136px;margin-left:-300px;margin-top:-68px;
+    border-radius:68px;background:linear-gradient(180deg,var(--orange2),var(--orange));
+    box-shadow:0 18px 40px rgba(255,91,20,.35);display:flex;align-items:center;justify-content:center;gap:22px;overflow:hidden;}
+  #cta .lbl{position:relative;font:800 46px/1 'Archivo';letter-spacing:.06em;color:#fff;height:46px;width:400px;}
+  #cta .lbl span{position:absolute;left:0;top:0;width:100%;text-align:left;white-space:nowrap;}
+  #cta .shine{position:absolute;top:-20px;bottom:-20px;width:120px;left:-200px;
+    background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));transform:skewX(-18deg);}
+  #ring{position:absolute;left:540px;top:1300px;width:600px;height:136px;margin-left:-300px;margin-top:-68px;
+    border-radius:68px;border:4px solid var(--orange);opacity:0;}
+  #hud{position:fixed;left:10px;top:10px;color:#fff;font:600 14px monospace;z-index:999;}
+  body.render #hud{display:none;}
+</style>
+</head>
+<body>
+<div id="hud"></div>
+<div id="stage">
+  <div id="topscrim"></div>
+  <div id="scrim"></div>
+
+  <!-- Shot 1 typography -->
+  <div id="s1word" class="abs anton" style="left:0;width:1080px;top:760px;text-align:center;font-size:250px;color:#fff;z-index:30;text-shadow:0 10px 50px rgba(0,0,0,.35);opacity:0"></div>
+  <div id="s1kick" class="kicker" style="left:0;width:1080px;text-align:center;top:300px;color:var(--stone);z-index:30;opacity:0">SJCLOTHES &nbsp;·&nbsp; NEW SEASON</div>
+  <div class="mask" id="s1m1" style="left:0;width:1080px;top:380px;height:170px;z-index:30"><span class="anton" style="font-size:168px;text-align:center">Looking for</span></div>
+  <div class="mask" id="s1m2" style="left:0;width:1080px;top:548px;height:230px;z-index:30"><span class="bodoni" style="font-size:176px;font-style:italic;font-weight:600;color:var(--orange);text-align:center;line-height:1.15">your style?</span></div>
+
+  <!-- Shot 2 -->
+  <div id="s2kick" class="kicker" style="left:80px;top:1050px;color:#fff;z-index:30;opacity:0">Introducing</div>
+  <div class="mask" id="s2m1" style="left:72px;top:1090px;width:900px;height:160px;z-index:30"><span class="bodoni" style="font-size:130px;font-style:italic;color:#fff;line-height:1.15">Meet</span></div>
+  <div class="mask" id="s2m2" style="left:72px;top:1240px;width:1000px;height:210px;z-index:30"><span class="anton" style="font-size:205px;color:#fff">SJClothes</span></div>
+  <div id="s2bar" class="abs" style="left:80px;top:1462px;height:10px;width:0;background:var(--orange);z-index:30"></div>
+  <div id="badge2" class="abs" style="left:640px;top:330px;width:330px;height:330px;z-index:35;opacity:0"></div>
+
+  <!-- Shots 3/4 titles -->
+  <div id="look" class="kicker" style="right:60px;top:110px;color:#fff;z-index:30;opacity:0;letter-spacing:.24em"></div>
+  <div id="s3kick" class="kicker" style="left:80px;top:1000px;color:#fff;z-index:30;opacity:0">Men's collection</div>
+  <div class="mask" id="s3m1" style="left:72px;top:1040px;width:900px;height:160px;z-index:30"><span class="bodoni" style="font-size:130px;font-style:italic;color:#fff;line-height:1.15">For</span></div>
+  <div class="mask" id="s3m2" style="left:72px;top:1190px;width:900px;height:220px;z-index:30"><span class="anton" style="font-size:215px;color:#fff">Him</span></div>
+  <div id="s3bar" class="abs" style="left:80px;top:1418px;height:10px;width:0;background:var(--orange);z-index:30"></div>
+
+  <div id="s4kick" class="kicker" style="right:80px;top:1000px;color:#fff;z-index:30;opacity:0;text-align:right">Women's collection</div>
+  <div class="mask" id="s4m1" style="right:72px;top:1040px;width:900px;height:160px;z-index:30"><span class="bodoni" style="font-size:130px;font-style:italic;color:#fff;line-height:1.15;text-align:right">For</span></div>
+  <div class="mask" id="s4m2" style="right:72px;top:1190px;width:900px;height:220px;z-index:30"><span class="anton" style="font-size:215px;color:#fff;text-align:right">Her</span></div>
+  <div id="s4bar" class="abs" style="right:80px;top:1418px;height:10px;width:0;background:var(--orange);z-index:30"></div>
+
+  <!-- Shot 5 band -->
+  <div id="band"><div class="t"></div></div>
+
+  <!-- Shot 6 end card -->
+  <div id="end" style="opacity:0">
+    <svg id="rings" class="abs" style="left:240px;top:340px" width="600" height="600" viewBox="0 0 600 600">
+      <circle id="r1" cx="300" cy="300" r="262" fill="none" stroke="#FF5B14" stroke-width="4" stroke-linecap="round"/>
+      <circle id="r2" cx="300" cy="300" r="292" fill="none" stroke="#111" stroke-opacity=".18" stroke-width="2"/>
+      <circle id="r3" cx="300" cy="300" r="232" fill="none" stroke="#FF5B14" stroke-opacity=".35" stroke-width="2" stroke-dasharray="4 14"/>
+    </svg>
+    <div id="badge6" class="abs" style="left:350px;top:450px;width:380px;height:380px"></div>
+    <div id="word6" class="abs" style="left:0;width:1080px;top:880px;text-align:center;font:800 96px/1 'Archivo';color:var(--ink)">SJCLOTHES</div>
+    <div id="tag6" class="abs" style="left:0;width:1080px;top:1010px;text-align:center;font:600 42px/1 'Archivo';letter-spacing:.14em">YOUR STYLE. <span style="color:var(--orange)">YOUR CHOICE.</span></div>
+    <div id="dont" class="abs bodoni" style="left:0;width:1080px;top:1150px;text-align:center;font-size:64px;font-style:italic;line-height:1.25;color:var(--ink)">
+      <div id="dont1">Don't just follow fashion.</div><div id="dont2" style="color:var(--orange)">Make it yours.</div></div>
+    <div id="explore" class="abs bodoni" style="left:0;width:1080px;top:1135px;text-align:center;font-size:58px;font-style:italic;color:var(--ink);opacity:0">Explore our collection.</div>
+    <div id="ring"></div>
+    <div id="cta" style="opacity:0">
+      <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+      <div class="lbl"><span id="cta1">DM US TO ORDER</span><span id="cta2" style="opacity:0">DM US TODAY</span></div>
+      <div class="shine"></div>
+    </div>
+  </div>
+
+  <div id="sub"></div>
+  <div id="flash"></div>
+</div>
+
+<script>
+/* ======================== CONFIG ======================== */
+const DUR = 28.0, FPS = 30;
+// Shot boundaries (seconds) — matched to the voiceover timing
+const T = {s1:0, s2:4.0, s3:7.5, s4:11.75, s5:16.25, s6:22.0};
+
+// Footage slots. Drop files into footage/ named <slot>.mp4|.mov|.jpg|.png — render.js picks them up.
+const SLOTS = {
+  presenter:    {label:'Female presenter · medium shot, to camera',  art:'presenter'},
+  men_look1:    {label:'Male model · look 1 · full-body walk',       art:'man1'},
+  men_detail:   {label:'Men · outfit close-up',                      art:'detailM'},
+  men_look2:    {label:'Male model · look 2',                        art:'man2'},
+  women_look1:  {label:'Female model · look 1 · editorial pose',     art:'woman1'},
+  women_detail: {label:'Women · garment close-up',                   art:'detailW'},
+  women_look2:  {label:'Female model · look 2',                      art:'woman2'},
+  hook_detail:  {label:'Hook · clothing close-up',                   art:'detailW', fallback:'women_detail'},
+  gallery_1:{fallback:'men_look2'}, gallery_2:{fallback:'women_look2'}, gallery_3:{fallback:'women_detail'},
+  gallery_4:{fallback:'men_detail'}, gallery_5:{fallback:'men_look1'}, gallery_6:{fallback:'women_look1'},
+};
+// Filled in by render.js:  { slot: {type:'image', src} | {type:'video', dir, frames, fps} }
+window.FOOTAGE = window.FOOTAGE || {};
+const SHOW_TAGS = !new URLSearchParams(location.search).has('notags');
+
+/* ======================== EASING ======================== */
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const lerp=(a,b,p)=>a+(b-a)*p;
+const P=(t,a,b)=>clamp((t-a)/(b-a));
+const eOut=p=>1-Math.pow(1-p,3);
+const eIO=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const eExpo=p=>p>=1?1:1-Math.pow(2,-10*p);
+const eBack=p=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(p-1,3)+c1*Math.pow(p-1,2);};
+const $=id=>document.getElementById(id);
+
+/* ======================== PLACEHOLDER ART ======================== */
+const SKIN='#B88B6E', HAIR='#231915';
+function studio(c1,c2){return `<defs><radialGradient id="g" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></radialGradient></defs>
+<rect width="1080" height="1920" fill="url(#g)"/><rect y="1560" width="1080" height="360" fill="${c2}" opacity=".55"/>`;}
+const ART = {
+ man1:()=>studio('#EFEBE5','#D3CABD')+`<g class="fig"><ellipse cx="540" cy="1668" rx="230" ry="26" fill="#000" opacity=".12"/>
+  <path d="M450 1180h85l-8 460h-58z" fill="#7E756B"/><path d="M545 1180h85l-18 460h-58z" fill="#857C71"/>
+  <ellipse cx="497" cy="1652" rx="44" ry="16" fill="#111"/><ellipse cx="585" cy="1652" rx="44" ry="16" fill="#111"/>
+  <path d="M398 470q142-44 284 0l46 720q-188 32-376 0z" fill="#1C1C1E"/>
+  <path d="M398 478l-40 560 54 6 30-500z" fill="#232326"/><path d="M682 478l40 560-54 6-30-500z" fill="#232326"/>
+  <path d="M540 470l-46 0 46 260 46-260z" fill="#EDE7DE"/><path d="M540 520v640" stroke="#000" stroke-opacity=".25" stroke-width="3"/>
+  <rect x="514" y="395" width="52" height="70" rx="12" fill="${SKIN}"/>
+  <ellipse cx="540" cy="330" rx="64" ry="78" fill="${SKIN}"/><path d="M476 318q0-96 64-96t66 92q-12-40-66-44t-64 48z" fill="${HAIR}"/></g>`,
+ man2:()=>studio('#E6E2DA','#C9C0B2')+`<g class="fig"><ellipse cx="540" cy="1668" rx="230" ry="26" fill="#000" opacity=".12"/>
+  <path d="M448 930h90l-10 710h-60z" fill="#23262B"/><path d="M542 930h90l-20 710h-60z" fill="#2A2E34"/>
+  <ellipse cx="497" cy="1652" rx="46" ry="16" fill="#F2EFEA"/><ellipse cx="585" cy="1652" rx="46" ry="16" fill="#F2EFEA"/>
+  <path d="M404 470q136-40 272 0l30 470q-166 30-332 0z" fill="#C49A6C"/>
+  <path d="M488 470h104l-10 470h-84z" fill="#F4F1EC"/>
+  <path d="M404 478l-46 520 54 8 34-470z" fill="#B88D60"/><path d="M676 478l46 520-54 8-34-470z" fill="#B88D60"/>
+  <rect x="514" y="395" width="52" height="70" rx="12" fill="${SKIN}"/>
+  <ellipse cx="540" cy="330" rx="64" ry="78" fill="${SKIN}"/><path d="M474 330q-6-108 66-108t66 104q-6-56-66-60t-66 64z" fill="${HAIR}"/></g>`,
+ woman1:()=>studio('#F3ECE5','#DCCFC2')+`<g class="fig"><ellipse cx="540" cy="1668" rx="210" ry="24" fill="#000" opacity=".12"/>
+  <path d="M492 1330h34l-6 320h-24z" fill="${SKIN}"/><path d="M556 1330h34l-4 320h-24z" fill="${SKIN}"/>
+  <path d="M488 1640h40l-4 22h-44z" fill="#111"/><path d="M558 1640h40l6 22h-44z" fill="#111"/>
+  <path d="M452 480q34 260 2 560l-34 6q-6-300 32-566z" fill="${SKIN}"/><path d="M628 480q-34 260-2 560l34 6q6-300-32-566z" fill="${SKIN}"/>
+  <path d="M458 470h164l-26 300h-112z" fill="#FF5B14"/><path d="M484 770h112l176 600q-232 46-464 0z" fill="#FF6A2B"/>
+  <path d="M484 770h112" stroke="#111" stroke-width="10"/>
+  <rect x="520" y="400" width="40" height="72" rx="10" fill="${SKIN}"/>
+  <path d="M470 330q-10-130 70-130t70 130q8 140 40 200h-220q32-60 40-200z" fill="${HAIR}"/>
+  <ellipse cx="540" cy="330" rx="56" ry="72" fill="${SKIN}"/><path d="M484 320q4-92 56-92t60 80q-30-40-62-40t-54 52z" fill="${HAIR}"/></g>`,
+ woman2:()=>studio('#ECE7E0','#CFC5B8')+`<g class="fig"><ellipse cx="540" cy="1668" rx="220" ry="24" fill="#000" opacity=".12"/>
+  <path d="M488 1400h40l-4 250h-32z" fill="#151515"/><path d="M552 1400h40l0 250h-32z" fill="#151515"/>
+  <path d="M482 1640h48l-2 24h-52z" fill="#111"/><path d="M552 1640h48l6 24h-52z" fill="#111"/>
+  <path d="M436 470q104-36 208 0l66 990q-170 30-340 0z" fill="#D8C7AE"/>
+  <path d="M500 470h80l-6 990h-68z" fill="#151515"/><path d="M500 470l40 240 40-240" fill="none" stroke="#BFAE94" stroke-width="10"/>
+  <path d="M436 478l-50 580 50 6 40-520z" fill="#CDBBA0"/><path d="M644 478l50 580-50 6-40-520z" fill="#CDBBA0"/>
+  <rect x="520" y="400" width="40" height="72" rx="10" fill="${SKIN}"/>
+  <ellipse cx="540" cy="330" rx="56" ry="72" fill="${SKIN}"/><path d="M482 340q-8-120 58-120t60 108q-2 40 10 70q-20-110-70-120t-58 62z" fill="${HAIR}"/>
+  <path d="M470 300q0-110 70-110t70 110z" fill="${HAIR}"/></g>`,
+ presenter:()=>studio('#E4DED6','#BDB3A6')+`<circle cx="820" cy="420" r="260" fill="#fff" opacity=".25"/><g class="fig">
+  <path d="M190 1920q10-560 160-700q190-90 380 0q150 140 160 700z" fill="#141414"/>
+  <path d="M470 1120h140l-70 120z" fill="${SKIN}"/>
+  <rect x="482" y="930" width="116" height="210" rx="40" fill="${SKIN}"/>
+  <path d="M370 700q-20-320 170-320t170 320q20 330 90 460q-120 60-260 20q-140 40-260-20q70-130 90-460z" fill="${HAIR}"/>
+  <ellipse cx="540" cy="700" rx="140" ry="178" fill="${SKIN}"/>
+  <path d="M400 690q0-230 140-230t146 200q-60-110-146-110t-140 140z" fill="${HAIR}"/></g>`,
+ detailM:()=>`<defs><pattern id="tw" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="16" height="16" fill="#2E3D55"/><rect width="7" height="16" fill="#364869"/></pattern></defs>
+  <rect width="1080" height="1920" fill="url(#tw)"/><g class="fig"><path d="M300 0v1920" stroke="#1F2A3C" stroke-width="40"/>
+  <path d="M300 0v1920" stroke="#FF8A3D" stroke-width="5" stroke-dasharray="22 16" transform="translate(-34 0)"/>
+  <path d="M300 0v1920" stroke="#FF8A3D" stroke-width="5" stroke-dasharray="22 16" transform="translate(34 0)"/>
+  <g fill="#B9B3A8" stroke="#8D867B" stroke-width="8"><circle cx="300" cy="620" r="62"/><circle cx="300" cy="1180" r="62"/></g>
+  <g fill="#8D867B"><circle cx="280" cy="610" r="9"/><circle cx="320" cy="630" r="9"/><circle cx="280" cy="1170" r="9"/><circle cx="320" cy="1190" r="9"/></g>
+  <path d="M640 0q120 900 0 1920" stroke="#1F2A3C" stroke-width="26" fill="none" opacity=".6"/></g>`,
+ detailW:()=>`<defs><pattern id="rib" width="36" height="36" patternUnits="userSpaceOnUse"><rect width="36" height="36" fill="#F2652A"/><rect width="18" height="36" fill="#FF7A3D"/></pattern>
+  <linearGradient id="sh" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient></defs>
+  <rect width="1080" height="1920" fill="url(#rib)"/><rect width="1080" height="1920" fill="url(#sh)"/>
+  <g class="fig"><path d="M0 1260q540-120 1080 0v660H0z" fill="#111"/><path d="M0 1260q540-120 1080 0" stroke="#E9D9B8" stroke-width="10" fill="none"/>
+  <circle cx="540" cy="900" r="70" fill="#E9D9B8"/><circle cx="540" cy="900" r="44" fill="none" stroke="#C8B48C" stroke-width="8"/></g>`,
+};
+
+/* ======================== PANELS ======================== */
+const stage=$('stage');
+function resolveSlot(slot){
+  let s=slot, guard=0;
+  while(!FOOTAGE[s] && SLOTS[s] && SLOTS[s].fallback && guard++<5) s=SLOTS[s].fallback;
+  return s;
+}
+function makePanel(z){
+  const el=document.createElement('div'); el.className='panel'; el.style.zIndex=z;
+  el.innerHTML='<div class="inner"><img class="media"><div class="ph"></div></div><div class="tag"></div>';
+  stage.appendChild(el);
+  return {el, inner:el.firstChild, img:el.querySelector('img'), ph:el.querySelector('.ph'), tag:el.querySelector('.tag'), slot:null};
+}
+const pending=[]; let UID=0;
+function setPanel(p, o){
+  if(!o || o.opacity===0 || o.w<=0 || o.h<=0){ p.el.style.display='none'; return; }
+  const s=resolveSlot(o.slot), f=FOOTAGE[s], art=(SLOTS[s]||SLOTS[o.slot]).art||SLOTS[resolveSlot(o.slot)]?.art;
+  p.el.style.display='block';
+  const x=o.x??0, y=o.y??0, w=o.w??1080, h=o.h??1920;
+  Object.assign(p.el.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',opacity:o.opacity??1,
+    borderRadius:(o.r||0)+'px', filter:o.blur?`blur(${o.blur}px)`:'none'});
+  // stage-anchored content (for wipes): inner fills the whole stage, offset by panel position
+  if(o.anchor==='stage'){ Object.assign(p.inner.style,{left:(-x)+'px',top:(-y)+'px',width:'1080px',height:'1920px'}); }
+  else { Object.assign(p.inner.style,{left:'0px',top:'0px',width:'100%',height:'100%'}); }
+  p.inner.style.transform=`translate(${o.tx||0}px,${o.ty||0}px) scale(${o.scale||1})`;
+  if(f){
+    p.ph.style.display='none'; p.img.style.display='block'; p.tag.style.display='none';
+    let src=f.src;
+    if(f.type==='video'){ const n=Math.max(1,f.frames); let i=Math.floor(Math.max(0,o.tl||0)*f.fps)%n; src=`${f.dir}/f_${String(i+1).padStart(5,'0')}.jpg`; }
+    if(p.img.getAttribute('src')!==src){ p.img.setAttribute('src',src); pending.push(p.img.decode().catch(()=>{})); }
+  } else {
+    p.img.style.display='none'; p.ph.style.display='block';
+    if(p.slot!==s){ const u='u'+(++UID); const svg=ART[art]().replace(/id="(\w+)"/g,`id="$1_${u}"`).replace(/url\(#(\w+)\)/g,`url(#$1_${u})`);
+      p.ph.innerHTML=`<svg viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice">${svg}</svg>`; p.slot=s; }
+    const fig=p.ph.querySelector('.fig'), tl=o.tl||0;
+    if(fig){ const bob=o.walk?Math.abs(Math.sin(tl*Math.PI*2.2))*-14:0, sway=o.sway?Math.sin(tl*2.4)*6:0;
+      fig.setAttribute('transform',`translate(${sway} ${bob})`); }
+    p.tag.style.display=SHOW_TAGS&&(o.w>=900)?'block':'none';
+    p.tag.textContent='PLACEHOLDER · footage/'+o.slot+(SLOTS[o.slot]&&SLOTS[o.slot].label?'  —  '+SLOTS[o.slot].label:'');
+  }
+}
+const PN = Array.from({length:10},(_,i)=>makePanel(5+i));   // general panels
+const G  = Array.from({length:6}, (_,i)=>makePanel(16+i));  // collage tiles
+
+/* ======================== BADGE (logo) ======================== */
+function badgeSVG(size){return `<svg width="${size}" height="${size}" viewBox="0 0 380 380">
+  <circle cx="190" cy="190" r="178" fill="#FF5B14"/><circle cx="190" cy="190" r="160" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
+  <text x="190" y="236" text-anchor="middle" font-family="Bodoni Moda" font-weight="700" font-size="150" fill="#fff" letter-spacing="-4">SJ</text>
+  <text x="190" y="290" text-anchor="middle" font-family="Archivo" font-weight="800" font-size="26" fill="#fff" letter-spacing="9">CLOTHES</text></svg>`;}
+$('badge2').innerHTML=badgeSVG(330); $('badge6').innerHTML=badgeSVG(380);
+
+/* ======================== HELPERS ======================== */
+function mask(id,t,a,dur=.5,out=null,outDur=.3){ // slide-up text reveal inside a mask
+  const sp=$(id).firstElementChild; let y=110;
+  if(t>=a) y=lerp(110,0,eExpo(P(t,a,a+dur)));
+  if(out!==null && t>=out) y=lerp(0,-110,eIO(P(t,out,out+outDur)));
+  sp.style.transform=`translateY(${y}%)`;
+}
+function fade(id,t,a,b,inD=.25,outD=.25){ const o=t<a||t>b?0:Math.min(P(t,a,a+inD), 1-P(t,b-outD,b)); $(id).style.opacity=o; return o; }
+const SUBS=[ [7.75,9.6,'From everyday looks,'],[11.75,13.4,'to styles that make a statement.'],
+  [13.45,16.0,'Explore clothing for both men and women.'] ];
+
+/* ======================== TIMELINE ======================== */
+function seek(t){
+  pending.length=0;
+  PN.forEach(p=>p.el.style.display='none'); G.forEach(p=>p.el.style.display='none');
+  let flash=0;
+
+  /* ---------- SHOT 1 · HOOK 0–4 ---------- */
+  const fl=[['men_look1',0],['women_look1',.5],['hook_detail',1.0]];
+  const words=['LOOKING','FOR','YOUR'];
+  if(t<4.3){
+    // quick-succession full-frame flashes
+    fl.forEach(([slot,a],i)=>{
+      if(t>=a && t<a+.5){ setPanel(PN[0],{slot,tl:t-a,scale:lerp(1.14,1.0,eOut(P(t,a,a+.5))),walk:true}); if(a>0) flash=Math.max(flash,1-P(t,a,a+.14)); }
+    });
+    const wi=Math.floor(t/.5);
+    if(t<1.5){ const w=$('s1word'); w.textContent=words[wi]; w.style.opacity=1;
+      w.style.transform=`scale(${lerp(1.18,1,eExpo(P(t,wi*.5,wi*.5+.3)))})`; $('s1word').style.letterSpacing='0.02em'; }
+    else $('s1word').style.opacity=0;
+    // triptych
+    const cw=310,ch=640,cy=900,gx=[37.5,385,732.5];
+    if(t>=1.5){
+      const exitP=eIO(P(t,3.72,4.1));
+      fl.forEach(([slot],i)=>{
+        let x=gx[i],y=cy,w=cw,h=ch,r=24,op=1;
+        if(i===2){ const p=eIO(P(t,1.5,1.98)); x=lerp(0,gx[2],p); y=lerp(0,cy,p); w=lerp(1080,cw,p); h=lerp(1920,ch,p); r=lerp(0,24,p); }
+        else { const a=1.58+i*.1, p=eOut(P(t,a,a+.5)); y=lerp(cy+700,cy,p); op=P(t,a,a+.2); }
+        y+=Math.sin((t+i)*2.1)*6 - exitP*(300+i*90);
+        setPanel(PN[1+i],{slot,x,y,w,h,r,opacity:op*(1-P(t,3.9,4.1)),tl:t,scale:lerp(1.12,1.0,P(t,1.5,4)),walk:i<2});
+      });
+      $('s1kick').style.opacity=P(t,1.9,2.3)*(1-P(t,3.7,3.9));
+      mask('s1m1',t,1.6,.55,3.72); mask('s1m2',t,1.76,.55,3.78);
+    } else { mask('s1m1',-1,0); mask('s1m2',-1,0); $('s1kick').style.opacity=0; }
+  } else { $('s1word').style.opacity=0; $('s1kick').style.opacity=0; mask('s1m1',-1,0); mask('s1m2',-1,0); }
+
+  /* ---------- SHOT 2 · PRESENTER 4–7.5 ---------- */
+  if(t>=3.85 && t<7.75){
+    const rp=eIO(P(t,3.85,4.28)), y=lerp(1920,0,rp);
+    const whip=eIO(P(t,7.35,7.62));
+    setPanel(PN[4],{slot:'presenter',anchor:'stage',x:-whip*1080,y,w:1080,h:1920-y,tl:t-4,
+      scale:lerp(1.0,1.09,eIO(P(t,4.0,7.5))),sway:true,blur:whip*14});
+  }
+  const s2on=t>=4.0&&t<7.6;
+  $('s2kick').style.opacity=s2on?P(t,4.25,4.55)*(1-P(t,7.3,7.5)):0;
+  mask('s2m1',s2on?t:-1,4.2,.5,7.3); mask('s2m2',s2on?t:-1,4.72,.5,7.33);
+  $('s2bar').style.width=(s2on?lerp(0,360,eExpo(P(t,5.0,5.6)))*(1-P(t,7.3,7.5)):0)+'px';
+  { const b=$('badge2'); if(t>=4.7&&t<7.6){ const p=P(t,4.72,5.25);
+      b.style.opacity=Math.min(1,p*3)*(1-P(t,7.3,7.5)); b.style.transform=`scale(${lerp(.2,1,eBack(p))}) rotate(${lerp(-40,0,eOut(p))+Math.sin(t*1.6)*2}deg) translateX(${-P(t,7.3,7.5)*120}px)`;
+    } else b.style.opacity=0; }
+
+  /* ---------- SHOT 3 · FOR HIM 7.5–11.75 ---------- */
+  if(t>=7.35 && t<11.95){
+    const inX=lerp(1080,0,eIO(P(t,7.35,7.62)));
+    if(t<9.5) setPanel(PN[5],{slot:'men_look1',x:inX,w:1080,h:1920,tl:t-7.5,scale:lerp(1.0,1.16,P(t,7.5,9.5)),walk:true,blur:(1-P(t,7.45,7.62))*12*(t<7.62?1:0)});
+    else if(t<10.5){ setPanel(PN[5],{slot:'men_detail',tl:t-9.5,scale:lerp(1.28,1.1,eExpo(P(t,9.5,9.85))),ty:lerp(40,-40,P(t,9.5,10.5))}); flash=Math.max(flash,.5*(1-P(t,9.5,9.62))); }
+    else {
+      const wx=lerp(1080,0,eIO(P(t,10.42,10.62)));
+      setPanel(PN[5],{slot:'men_detail',x:wx-1080,tl:t-9.5,scale:1.1,ty:-40,blur:wx>1?10:0});
+      setPanel(PN[6],{slot:'men_look2',x:wx,tl:t-10.5,scale:lerp(1.08,1.0,P(t,10.5,11.75)),walk:true,blur:wx>1?10:0});
+    }
+  }
+  const s3on=t>=7.6&&t<11.75;
+  $('s3kick').style.opacity=s3on?P(t,7.75,8.05)*(1-P(t,11.5,11.7)):0;
+  mask('s3m1',s3on?t:-1,7.7,.5,11.5); mask('s3m2',s3on?t:-1,7.85,.5,11.53);
+  $('s3bar').style.width=(s3on?lerp(0,300,eExpo(P(t,8.1,8.7)))*(1-P(t,11.5,11.7)):0)+'px';
+
+  /* ---------- SHOT 4 · FOR HER 11.75–16.25 ---------- */
+  if(t>=11.6 && t<16.6){
+    const rp=eIO(P(t,11.6,11.98)), y=lerp(1920,0,rp);
+    if(t<13.5) setPanel(PN[7],{slot:'women_look1',anchor:'stage',y,w:1080,h:1920-y,tl:t-11.75,scale:lerp(1.1,1.0,eOut(P(t,11.75,13.5))),sway:true});
+    else if(t<14.75){ setPanel(PN[7],{slot:'women_detail',tl:t-13.5,scale:1.12,ty:lerp(60,-60,P(t,13.5,14.75))}); flash=Math.max(flash,.45*(1-P(t,13.5,13.62))); }
+    else {
+      const cf=eIO(P(t,14.75,15.1));
+      if(cf<1) setPanel(PN[7],{slot:'women_detail',tl:t-13.5,scale:1.12,ty:-60});
+      setPanel(PN[8],{slot:'women_look2',opacity:cf,tl:t-14.75,scale:lerp(1.08,1.0,P(t,14.75,16.25)),sway:true});
+    }
+  }
+  const s4on=t>=11.8&&t<16.2;
+  $('s4kick').style.opacity=s4on?P(t,11.95,12.25)*(1-P(t,16.0,16.2)):0;
+  mask('s4m1',s4on?t:-1,11.9,.5,16.0); mask('s4m2',s4on?t:-1,12.05,.5,16.03);
+  $('s4bar').style.width=(s4on?lerp(0,300,eExpo(P(t,12.3,12.9)))*(1-P(t,16.0,16.2)):0)+'px';
+
+  // "LOOK 01/02" counter
+  { const L=$('look'); let txt='', o=0;
+    if(t>=7.7&&t<11.7){ txt=t<10.5?'LOOK 01 / 02':'LOOK 02 / 02'; o=P(t,7.7,8)*(1-P(t,11.5,11.7)); }
+    else if(t>=11.95&&t<16.2){ txt=t<14.75?'LOOK 01 / 02':'LOOK 02 / 02'; o=P(t,11.95,12.25)*(1-P(t,16,16.2)); }
+    L.textContent=txt; L.style.opacity=o; }
+
+  // scrims for legibility over footage
+  $('scrim').style.opacity = (t>=4.05&&t<16.3)? Math.min(P(t,4.05,4.4),1-P(t,16.05,16.3)) : 0;
+  $('topscrim').style.opacity = (t>=7.6&&t<16.3)? Math.min(P(t,7.6,7.9),1-P(t,16.05,16.3)) : 0;
+
+  /* ---------- SHOT 5 · COLLAGE 16.25–22 ---------- */
+  if(t>=16.1 && t<22.6){
+    const g=18, hw=(1080-g)/2, rh=(1920-2*g)/3, qh=(1920-g)/2;
+    const L1=[{x:0,y:0,w:hw,h:1920},{x:hw+g,y:0,w:hw,h:1920},{x:0,y:1920,w:hw,h:0},{x:hw+g,y:1920,w:hw,h:0},{x:0,y:1920,w:hw,h:0},{x:hw+g,y:1920,w:hw,h:0}];
+    const L2=[{x:0,y:0,w:hw,h:qh},{x:hw+g,y:0,w:hw,h:qh},{x:0,y:qh+g,w:hw,h:qh},{x:hw+g,y:qh+g,w:hw,h:qh},{x:0,y:1920,w:hw,h:0},{x:hw+g,y:1920,w:hw,h:0}];
+    const L3=[0,1,2,3,4,5].map(i=>({x:(i%2)*(hw+g),y:Math.floor(i/2)*(rh+g),w:hw,h:rh}));
+    // entry from shot 4: women tile starts full frame, men tile slides in from left
+    const L0=[{x:-hw,y:0,w:hw,h:1920},{x:0,y:0,w:1080,h:1920},L1[2],L1[3],L1[4],L1[5]];
+    const pA=eIO(P(t,16.1,16.5)), pB=eIO(P(t,17.55,17.9)), pC=eIO(P(t,18.62,18.97));
+    const base=['men_look2','women_look2','women_detail','men_detail','men_look1','women_look1'];
+    const pool=['gallery_1','gallery_2','gallery_3','gallery_4','gallery_5','gallery_6','men_look1','women_look1','men_look2','women_look2','men_detail','women_detail'];
+    const order=[0,3,4,1,5,2];
+    const k=t>=19.2?Math.floor((t-19.2)/0.5)+1:0;           // a tile swaps on every beat
+    for(let i=0;i<6;i++){
+      const r0=L0[i];
+      let r={x:lerp(r0.x,L1[i].x,pA),y:lerp(r0.y,L1[i].y,pA),w:lerp(r0.w,L1[i].w,pA),h:lerp(r0.h,L1[i].h,pA)};
+      if(pB>0) r={x:lerp(r.x,L2[i].x,pB),y:lerp(r.y,L2[i].y,pB),w:lerp(r.w,L2[i].w,pB),h:lerp(r.h,L2[i].h,pB)};
+      if(pC>0) r={x:lerp(r.x,L3[i].x,pC),y:lerp(r.y,L3[i].y,pC),w:lerp(r.w,L3[i].w,pC),h:lerp(r.h,L3[i].h,pC)};
+      const swaps=Math.floor((k+ (5-order.indexOf(i)))/6);   // how many times this tile has swapped
+      let slot= swaps>0 ? pool[(i*2+swaps*3)%pool.length] : base[i];
+      if(swaps>0){ const lastSwap=19.2+ (order.indexOf(i)+ (swaps-1)*6)*0.5 - .5; }
+      // exit into end card (shot 6)
+      const ex=eIO(P(t,21.85+i*.05,22.35+i*.05));
+      const cx=r.x+r.w/2, cyy=r.y+r.h/2, sc=1-ex;
+      r={x:cx-r.w*sc/2,y:cyy-r.h*sc/2,w:r.w*sc,h:r.h*sc};
+      const justSwapped = t>=19.2 && order[(k-1+600)%6]===i && (t-19.2)%0.5<0.1;
+      setPanel(G[i],{slot,...r,r:lerp(0,28,ex),tl:t-16.25+i*.3,scale:1.06+0.04*Math.sin(t*.8+i),walk:/look/.test(slot),opacity:1-P(t,22.2+i*.05,22.45+i*.05),blur:justSwapped?3:0});
+    }
+  }
+  // band text
+  { const B=$('band'), bt=B.firstElementChild; let show=false;
+    const seq=[[16.4,17.62,'DIFFERENT STYLES.','#111','anton',118,170],[17.62,18.7,'DIFFERENT VIBES.','#111','anton',118,170],
+               [18.7,19.9,'ONE DESTINATION.','#FF5B14','anton',118,170],[19.95,21.85,'Your next favourite<br>outfit is waiting.','#111','bodoni',84,260]];
+    for(const [a,b,txt,bg,font,fs,h] of seq){ if(t>=a&&t<b){ show=true;
+        const first=(a===16.4||a===19.95), last=(b===19.9||b===21.85);
+        const sIn=first?eExpo(P(t,a,a+.35)):1, sOut=last?1-eIO(P(t,b-.25,b)):1;
+        B.style.background=bg; B.style.height=h+'px'; B.style.top=(960-h/2)+'px';
+        B.style.transform=`scaleX(${sIn*sOut})`; B.style.transformOrigin=last&&t>b-.25?'100% 50%':'0 50%';
+        bt.innerHTML=txt; bt.className='t '+(font==='anton'?'anton':'bodoni');
+        bt.style.fontSize=fs+'px'; bt.style.fontStyle=font==='bodoni'?'italic':'normal'; bt.style.lineHeight=font==='bodoni'?'1.15':'1';
+        bt.style.letterSpacing=font==='anton'?'.03em':'0';
+        bt.style.transform=`translateY(${lerp(60,0,eExpo(P(t,a+.05,a+.4)))}px)`; bt.style.opacity=P(t,a+.05,a+.2); } }
+    B.style.display=show?'flex':'none'; }
+
+  /* ---------- SHOT 6 · CTA + END CARD 22–28 ---------- */
+  { const E=$('end');
+    if(t>=22.2){ E.style.opacity=1; E.style.transform=`scale(${lerp(1.07,1.0,eOut(P(t,22.3,28)))})`;
+      const bp=P(t,22.35,22.9); $('badge6').style.transform=`scale(${lerp(0,1,eBack(bp))}) rotate(${lerp(-90,0,eOut(bp))}deg)`;
+      // rings draw in & rotate
+      const C1=2*Math.PI*262, C2=2*Math.PI*292;
+      $('r1').setAttribute('stroke-dasharray',`${C1*.62*eOut(P(t,22.5,23.3))} ${C1}`); $('r1').setAttribute('transform',`rotate(${-90+t*28} 300 300)`);
+      $('r2').setAttribute('stroke-dasharray',`${C2*eOut(P(t,22.6,23.5))} ${C2}`);   $('r2').setAttribute('transform',`rotate(${90-t*12} 300 300)`);
+      $('r3').setAttribute('transform',`rotate(${t*-20} 300 300)`); $('r3').style.opacity=P(t,22.8,23.3);
+      const wp=P(t,22.7,23.4); $('word6').style.opacity=wp; $('word6').style.letterSpacing=lerp(.5,.16,eOut(wp))+'em';
+      $('tag6').style.opacity=P(t,23.1,23.5); $('tag6').style.transform=`translateY(${lerp(24,0,eOut(P(t,23.1,23.6)))}px)`;
+      // "Don't just follow fashion. Make it yours." (VO 22.25–24.6)
+      const d1=P(t,22.45,22.8)*(1-P(t,24.45,24.7)), d2=P(t,23.75,24.05)*(1-P(t,24.45,24.7));
+      $('dont1').style.opacity=d1; $('dont2').style.opacity=d2;
+      $('dont1').style.transform=`translateY(${lerp(30,0,eOut(P(t,22.45,22.9)))}px)`; $('dont2').style.transform=`translateY(${lerp(30,0,eOut(P(t,23.75,24.2)))}px)`;
+      // CTA pill (VO "DM SJClothes today" 24.8)
+      const cp=P(t,24.6,25.1), cta=$('cta');
+      cta.style.opacity=Math.min(1,cp*3); cta.style.transform=`scale(${lerp(.4,1,eBack(cp))})`;
+      const sh=cta.querySelector('.shine'); const s1=P(t,25.2,25.75), s2=P(t,27.0,27.5);
+      sh.style.left=(s1>0&&s1<1? lerp(-200,700,s1) : s2>0&&s2<1? lerp(-200,700,s2) : -200)+'px';
+      const swap=eIO(P(t,26.35,26.7));
+      $('cta1').style.opacity=1-swap; $('cta1').style.transform=`translateY(${-swap*40}px)`;
+      $('cta2').style.opacity=swap;   $('cta2').style.transform=`translateY(${(1-swap)*40}px)`;
+      const rg=$('ring'); if(t>=25.1){ const ph=((t-25.1)%1.0); rg.style.opacity=(1-ph)*.6; rg.style.transform=`scale(${1+ph*.18},${1+ph*.5})`; } else rg.style.opacity=0;
+      const ep=P(t,26.3,26.8); $('explore').style.opacity=ep; $('explore').style.transform=`translateY(${lerp(30,0,eOut(ep))}px)`;
+      // pill moves down slightly to make room for "Explore our collection."
+      const mv=eIO(P(t,26.2,26.6))*40; cta.style.top=(1300+mv)+'px'; rg.style.top=(1300+mv)+'px';
+    } else E.style.opacity=0; }
+
+  /* ---------- SUBTITLES ---------- */
+  { const S=$('sub'); let o=0;
+    for(const [a,b,txt] of SUBS){ if(t>=a&&t<b){ S.textContent=txt; o=Math.min(P(t,a,a+.15),1-P(t,b-.15,b)); } }
+    S.style.opacity=o; }
+
+  // white flash on hard cuts + collage-to-white transition
+  flash=Math.max(flash, (t>=21.9&&t<22.5)? .0 : 0, (t>=16.1&&t<16.3)? .35*(1-P(t,16.1,16.3)):0);
+  $('flash').style.opacity=flash;
+
+  return Promise.all(pending);
+}
+window.seek=seek; window.DUR=DUR; window.FPS=FPS;
+
+/* ======================== PREVIEW MODE ======================== */
+const qs=new URLSearchParams(location.search);
+if(qs.has('render')){ document.body.classList.add('render'); }
+else {
+  const fit=()=>{const s=Math.min(innerWidth/1080,(innerHeight)/1920); stage.style.transform=`scale(${s})`; document.body.style.height=1920*s+'px';};
+  addEventListener('resize',fit); fit();
+  let t0=performance.now(), paused=false, tp=0;
+  stage.addEventListener('click',()=>{paused=!paused; t0=performance.now()-tp*1000;});
+  const a=new Audio('out/soundtrack.wav'); let started=false;
+  stage.addEventListener('dblclick',()=>{ t0=performance.now(); a.currentTime=0; a.play().catch(()=>{}); });
+  (function loop(){ if(!paused){ tp=((performance.now()-t0)/1000)%DUR; seek(tp);} $('hud').textContent=tp.toFixed(2)+'s  (click pause · dbl-click restart w/ audio)'; requestAnimationFrame(loop); })();
+  if(qs.has('t')){ paused=true; tp=parseFloat(qs.get('t')); seek(tp); }
+}
+</script>
+</body>
+</html>
